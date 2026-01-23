@@ -1,0 +1,32 @@
+{
+    "model_name": "bear_headhunter_v11",
+    "processor_version": "v11",
+    "description": "High Precision Bear Model (V11). Trained on V11 Feature Set.",
+    "hidden_size": 512,
+    "lstm_layers": 1,
+    "trans_layers": 4,
+    "n_experts": 4,
+    "dropout": 0.0,
+    "input_dim": 12,
+    "static_dim": 4,
+    "feature_cols": [
+        "log_ret",
+        "log_ret_3",
+        "log_ret_5",
+        "log_ret_20",
+        "gap_norm",
+        "slope_5d_norm",
+        "rsi_smooth",
+        "rsi",
+        "atr_norm",
+        "vix_norm",
+        "rates_norm",
+        "vol_norm"
+    ],
+    "static_cols": [
+        "strike_distance",
+        "dte_normalized",
+        "is_call",
+        "moneyness"
+    ]
+}
