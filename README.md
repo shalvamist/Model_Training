@@ -12,9 +12,9 @@ Combines the strengths of **LSTMs** (sequential local patterns) and **Transforme
 ```mermaid
 graph TD
     subgraph Inputs
-        D[Dynamic Features <br> (Returns, Techs)] -->|Batch, Seq, Feat| EncDyn
-        S[Static Features <br> (Strike Dist, Moneyness)] -->|Batch, Feat| EncStat
-        T[Time Features <br> (DoW, MoY)] -->|Batch, 2| EmbTime
+        D["Dynamic Features <br> (Returns, Techs)"] -->|Batch, Seq, Feat| EncDyn
+        S["Static Features <br> (Strike Dist, Moneyness)"] -->|Batch, Feat| EncStat
+        T["Time Features <br> (DoW, MoY)"] -->|Batch, 2| EmbTime
     end
 
     subgraph "Hybrid Encoder"
@@ -49,10 +49,10 @@ graph TD
     end
 
     subgraph "Advanced Encoding"
-        Norm -->|Linear| BiLSTM[Bi-Directional LSTM]
-        BiLSTM -->|Forward + Backward| Context[Full Temporal Context]
-        Context -->|KAN-Former| Trans[Transformer with KAN]
-        Trans -->|SwiGLU| Gating[Gated Representation]
+        Norm -->|Linear| BiLSTM["Bi-Directional LSTM"]
+        BiLSTM -->|"Forward + Backward"| Context["Full Temporal Context"]
+        Context -->|KAN-Former| Trans["Transformer with KAN"]
+        Trans -->|SwiGLU| Gating["Gated Representation"]
     end
 
     subgraph "Spline-Based Heads"
