@@ -45,7 +45,7 @@ Enhances the standard model with **RevIN** for stationarity, **Bi-Directional LS
 ```mermaid
 graph TD
     subgraph "Robust Input"
-        Raw[Raw Price/Returns] -->|RevIN (Normalize)| Norm[Normalized Input]
+        Raw["Raw Price/Returns"] -->|"RevIN (Normalize)"| Norm["Normalized Input"]
     end
 
     subgraph "Advanced Encoding"
@@ -56,12 +56,12 @@ graph TD
     end
 
     subgraph "Spline-Based Heads"
-        Gating -->|KAN Layer 1| Expert1
-        Gating -->|KAN Layer 2| Expert2
-        Expert1 & Expert2 -->|Learnable Splines| Output
+        Gating -->|"KAN Layer 1"| Expert1
+        Gating -->|"KAN Layer 2"| Expert2
+        Expert1 & Expert2 -->|"Learnable Splines"| Output
     end
 
-    Output -->|RevIN (Denormalize)| FinalPred
+    Output -->|"RevIN (Denormalize)"| FinalPred
 ```
 
 ---
