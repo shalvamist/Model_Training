@@ -1,5 +1,5 @@
 {
-    "experment_name": "sector_alpha_rotator",
+    "experment_name": "industrial_sniper",
     "processor": "generic",
     "model_type": "experimental_v17",
     "use_revin": true,
@@ -9,22 +9,24 @@
     "train_years": 13,
     "val_years": 2,
     "test_years": 2,
-    "batch_size": 32,
+    "batch_size": 64,
     "epochs": 50,
     "early_stopping_patience": 10,
-    "hidden_size": 64,
+    "hidden_size": 128,
     "n_heads": 4,
-    "dropout": 0.2,
-    "lr": 0.0001,
-    "lstm_layers": 2,
-    "trans_layers": 2,
-    "n_experts": 8,
-    "loss_type": "focal",
+    "dropout": 0.2315701981589012,
+    "lr": 0.00030728698852266345,
+    "lstm_layers": 4,
+    "trans_layers": 4,
+    "n_experts": 32,
+    "loss_type": "quantile",
+    "quantiles": [
+        0.1,
+        0.5,
+        0.9
+    ],
     "extra_tickers": [
-        "XLY",
-        "XLP",
-        "XLK",
-        "XLU"
+        "XLI"
     ],
     "feature_pipeline": [
         {
@@ -32,41 +34,40 @@
             "input": "underlying_close",
             "output": "log_ret",
             "lags": [
-                5,
-                20
+                3,
+                5
             ]
         },
         {
-            "step": "arithmetic",
-            "formula": "xly / (xlp + 1e-6)",
-            "output": "ratio_risk"
-        },
-        {
-            "step": "arithmetic",
-            "formula": "xlk / (xlu + 1e-6)",
-            "output": "ratio_growth"
+            "step": "gap",
+            "open_col": "underlying_open",
+            "close_col": "underlying_close",
+            "output": "gap_raw"
         },
         {
             "step": "technical_indicator",
             "indicator": "rsi",
-            "input": "ratio_risk",
-            "period": 14,
-            "output": "rsi_risk"
+            "period": 3,
+            "output": "rsi_3"
         },
         {
-            "step": "technical_indicator",
-            "indicator": "macd",
-            "input": "ratio_growth",
-            "output": "macd_growth"
+            "step": "rolling_stat",
+            "input": "volume",
+            "window": 20,
+            "stat": "mean",
+            "output": "volume_ma_20"
+        },
+        {
+            "step": "arithmetic",
+            "formula": "volume / (volume_ma_20 + 1e-6)",
+            "output": "vol_spike"
         },
         {
             "step": "normalize",
             "columns": [
-                "ratio_risk",
-                "ratio_growth",
-                "rsi_risk",
-                "macd_growth",
-                "us_treasury_10y",
+                "rsi_3",
+                "gap_raw",
+                "vol_spike",
                 "vix"
             ],
             "window": 60,
@@ -75,21 +76,14 @@
     ],
     "dynamic_columns": [
         "log_ret",
+        "log_ret_3",
         "log_ret_5",
-        "log_ret_20",
-        "ratio_risk_norm",
-        "ratio_growth_norm",
-        "rsi_risk_norm",
-        "macd_growth_norm",
-        "us_treasury_10y_norm",
+        "gap_raw_norm",
+        "rsi_3_norm",
+        "vol_spike_norm",
         "vix_norm"
     ],
-    "static_columns": [
-        "strike_distance",
-        "dte_normalized",
-        "is_call",
-        "moneyness"
-    ],
+    "static_columns": [],
     "targets": [
         {
             "name": "target_1",
@@ -107,11 +101,10 @@
     "lookback_window": 60,
     "optuna": {
         "lr": [
-            1e-5,
-            5e-4
+            0.0001,
+            0.001
         ],
         "batch_size": [
-            32,
             64,
             128,
             256
@@ -124,16 +117,18 @@
         "lstm_layers": [
             2,
             4,
-            6,
-            8
+            8,
+            16
         ],
         "trans_layers": [
             2,
             4,
+            6,
             8,
             16
         ],
         "n_experts": [
+            4,
             8,
             16,
             32
@@ -143,5 +138,7 @@
             0.3
         ]
     },
-    "target_col": "target_5d"
+    "target_col": "target_5d",
+    "input_dim": 7,
+    "static_dim": 0
 }

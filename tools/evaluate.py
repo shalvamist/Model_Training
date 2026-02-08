@@ -4,9 +4,17 @@ import logging
 import sys
 import torch
 import pandas as pd
+import numpy as np
 import os
 from sklearn.metrics import classification_report
-from Model_trading_training.library.factory import ModelFactory
+
+# Add root to sys.path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+
+from library.factory import ModelFactory
+from library.utils import MetricsCalculator
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', stream=sys.stdout)
@@ -18,6 +26,8 @@ def main():
     parser.add_argument("--weights", type=str, required=True, help="Path to .pth weights file")
     parser.add_argument("--device", type=str, default="cpu", help="Device (cpu/cuda)")
     parser.add_argument("--output_csv", type=str, default="predictions.csv", help="Output CSV predictions")
+    parser.add_argument("--report_file", type=str, default="evaluation_report.txt", help="Output Report File")
+    parser.add_argument("--metrics_json", type=str, default="evaluation_metrics.json", help="Output Metrics JSON")
     args = parser.parse_args()
     
     logger.info(f"Loading Config: {args.config}")
@@ -31,7 +41,9 @@ def main():
         
     # 3. Get Processed Data
     logger.info("Preparing Data...")
-    processor = ModelFactory.get_processor(config.get('processor_version', 'v11'), config)
+    # Prefer 'processor' key (new), fallback to 'processor_version' (old), default to 'generic'
+    proc_type = config.get('processor', config.get('processor_version', 'generic'))
+    processor = ModelFactory.get_processor(proc_type, config)
     df = processor.fetch_data()
     df_proc, dyn_cols, stat_cols = processor.process(df)
     data = processor.create_sequences(df_proc, dyn_cols, stat_cols)
@@ -50,11 +62,38 @@ def main():
     with torch.no_grad():
         r1, c1, r2, c2 = model(X_d_test, X_s_test, X_t_test)
         
+    p1_reg = r1.cpu().numpy()
+    p2_reg = r2.cpu().numpy()
+    
+    # Handle Quantile Output (Select Median 0.5)
+    if p1_reg.ndim > 1 and p1_reg.shape[1] > 1:
+        # Assuming quantiles are sorted or we use the middle one
+        # For [0.1, 0.5, 0.9], median is index 1
+        # Check config for quantiles
+        qs = config.get('quantiles', [0.1, 0.5, 0.9])
+        if 0.5 in qs:
+            idx = qs.index(0.5)
+            p1_reg = p1_reg[:, idx]
+        else:
+            # Fallback: take middle
+            p1_reg = p1_reg[:, p1_reg.shape[1] // 2]
+    else:
+        p1_reg = p1_reg.flatten()
+        
+    if p2_reg.ndim > 1 and p2_reg.shape[1] > 1:
+        qs = config.get('quantiles', [0.1, 0.5, 0.9])
+        if 0.5 in qs:
+            idx = qs.index(0.5)
+            p2_reg = p2_reg[:, idx]
+        else:
+            p2_reg = p2_reg[:, p2_reg.shape[1] // 2]
+    else:
+        p2_reg = p2_reg.flatten()
+
     p1_cls = torch.argmax(c1, dim=1).cpu().numpy()
     p2_cls = torch.argmax(c2, dim=1).cpu().numpy()
     
     # Targets for Report
-    # Logic: > 2% Bull, < -2% Bear
     t1_raw = Y_1[split_idx:]
     t1_cls = np.ones_like(t1_raw, dtype=int)
     t1_cls[t1_raw > 0.02] = 2; t1_cls[t1_raw < -0.02] = 0
@@ -63,21 +102,87 @@ def main():
     t2_cls = np.ones_like(t2_raw, dtype=int)
     t2_cls[t2_raw > 0.04] = 2; t2_cls[t2_raw < -0.04] = 0
     
-    # 5. Reports
-    print("\n=== Horizon 1 (Short Term) Report ===")
-    print(classification_report(t1_cls, p1_cls, target_names=['Bear', 'Neutral', 'Bull']))
+    # 5. Metrics Calculation
     
-    print("\n=== Horizon 2 (Medium Term) Report ===")
-    print(classification_report(t2_cls, p2_cls, target_names=['Bear', 'Neutral', 'Bull']))
+    # H1 Metrics
+    metrics_h1_cls = MetricsCalculator.get_classification_metrics(t1_cls, p1_cls)
+    metrics_h1_reg = MetricsCalculator.get_regression_metrics(t1_raw, p1_reg)
+    metrics_h1_dir = MetricsCalculator.get_directional_accuracy(t1_raw, p1_reg)
+    sim_h1 = MetricsCalculator.get_simple_trading_simulation(t1_raw, p1_cls)
     
-    # 6. Save
+    # H2 Metrics
+    metrics_h2_cls = MetricsCalculator.get_classification_metrics(t2_cls, p2_cls)
+    metrics_h2_reg = MetricsCalculator.get_regression_metrics(t2_raw, p2_reg)
+    metrics_h2_dir = MetricsCalculator.get_directional_accuracy(t2_raw, p2_reg)
+    sim_h2 = MetricsCalculator.get_simple_trading_simulation(t2_raw, p2_cls)
+    
+    # 6. Reporting
+    report = []
+    report.append("==================================================")
+    report.append(f"EVALUATION REPORT: {os.path.basename(args.config)}")
+    report.append("==================================================")
+    report.append(f"Model ID: {config.get('experiment_name', 'N/A')}")
+    report.append(f"Test Samples: {len(X_d_test)}")
+    report.append("")
+    
+    def format_metrics(h_name, cls_m, reg_m, dir_acc, sim_m):
+        s = []
+        s.append(f"--- {h_name} Horizon ---")
+        s.append(f"[Classification] Accuracy: {cls_m.get('Accuracy', 'N/A')}") # Accuracy not in dict, rely on report or add? sklearn report covers it
+        s.append(f"[Classification] F1 (Macro): {cls_m['F1']:.4f}")
+        s.append(f"[Classification] MCC: {cls_m['MCC']:.4f}")
+        s.append(f"[Regression]     MAE: {reg_m['MAE']:.5f} | RMSE: {reg_m['RMSE']:.5f} | R2: {reg_m['R2']:.4f}")
+        s.append(f"[Directional]    Reg Direction Acc: {dir_acc*100:.2f}%")
+        s.append(f"[Trading Sim]    Total Return: {sim_m['Total_Strategy_Return']*100:.2f}% (Market: {sim_m['Total_Market_Return']*100:.2f}%)")
+        s.append(f"[Trading Sim]    Win Rate: {sim_m['Win_Rate']*100:.2f}% | Sharpe: {sim_m['Sharpe_Ratio']:.2f}")
+        return "\n".join(s)
+
+    report.append(format_metrics("Horizon 1 (Short)", metrics_h1_cls, metrics_h1_reg, metrics_h1_dir, sim_h1))
+    report.append("")
+    report.append(format_metrics("Horizon 2 (Medium)", metrics_h2_cls, metrics_h2_reg, metrics_h2_dir, sim_h2))
+    report.append("")
+    
+    report.append("=== Detailed Classification Report (H1) ===")
+    report.append(classification_report(t1_cls, p1_cls, target_names=['Bear', 'Neutral', 'Bull']))
+    
+    report.append("=== Detailed Classification Report (H2) ===")
+    report.append(classification_report(t2_cls, p2_cls, target_names=['Bear', 'Neutral', 'Bull']))
+    
+    report_text = "\n".join(report)
+    
+    # Print to Console (Brief)
+    print("\n" + report_text)
+    
+    # Save Report
+    with open(args.report_file, 'w') as f:
+        f.write(report_text)
+    logger.info(f"Detailed report saved to {args.report_file}")
+    
+    # Save JSON
+    all_metrics = {
+        "h1": {**metrics_h1_cls, **metrics_h1_reg, "directional_acc": metrics_h1_dir, "trading_sim": sim_h1},
+        "h2": {**metrics_h2_cls, **metrics_h2_reg, "directional_acc": metrics_h2_dir, "trading_sim": sim_h2}
+    }
+    # Convert numpy types to native
+    def convert(o):
+        if isinstance(o, np.int64): return int(o)
+        if isinstance(o, np.float32): return float(o)
+        if isinstance(o, np.ndarray): return o.tolist()
+        return o
+
+    with open(args.metrics_json, 'w') as f:
+        json.dump(all_metrics, f, indent=4, default=convert)
+    logger.info(f"Metrics JSON saved to {args.metrics_json}")
+
+    # 7. Save Predictions CSV
     df_res = pd.DataFrame({
         'Date': dates[split_idx:],
-        'Act_H1': t1_raw, 'Pred_H1': p1_cls,
-        'Act_H2': t2_raw, 'Pred_H2': p2_cls
+        'Act_H1_Reg': t1_raw, 'Pred_H1_Reg': p1_reg, 'Pred_H1_Cls': p1_cls,
+        'Act_H2_Reg': t2_raw, 'Pred_H2_Reg': p2_reg, 'Pred_H2_Cls': p2_cls
     })
     df_res.to_csv(args.output_csv, index=False)
     logger.info(f"Predictions saved to {args.output_csv}")
 
 if __name__ == "__main__":
     main()
+
