@@ -2,8 +2,8 @@ import logging
 import json
 import os
 import torch
-from .processors import ProcessorV11, ProcessorV13, ProcessorV15
-from .network_architectures import HybridJointNetwork, ExperimentalNetwork
+from .processors import ProcessorV11, ProcessorV13, ProcessorV15, GenericProcessor
+from .network_architectures import HybridJointNetwork, ExperimentalNetwork, PatchTST
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,11 @@ class ModelFactory:
         if version == 'v11': return ProcessorV11(config)
         if version == 'v13': return ProcessorV13(config)
         if version == 'v15': return ProcessorV15(config)
+        if version == 'generic': return GenericProcessor(config)
+        if version == 'universal':
+            # Dynamic import to support models_evo extension
+            from models_evo.processors import UniversalProcessor
+            return UniversalProcessor(config)
         raise ValueError(f"Unknown Processor Version: {version}")
         
     @staticmethod
@@ -25,6 +30,10 @@ class ModelFactory:
         if config.get('model_type') == 'experimental_v17':
             logger.info("Instantiating Experimental V17 Network (RevIN + BiLSTM + KAN)")
             return ExperimentalNetwork(config)
+            
+        if config.get('model_type') == 'patchtst':
+            logger.info("Instantiating PatchTST Network")
+            return PatchTST(config)
             
         return HybridJointNetwork(config)
         

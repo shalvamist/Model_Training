@@ -1,0 +1,139 @@
+{
+    "experiment_name": "v11_replicated",
+    "processor": "generic",
+    "use_gpu": false,
+    "batch_size": 32,
+    "epochs": 50,
+    "lr": 1e-4,
+    "loss_type": "focal",
+    "feature_pipeline": [
+        {
+            "step": "log_return",
+            "input": "underlying_close",
+            "output": "log_ret",
+            "lags": [
+                3,
+                5,
+                20
+            ]
+        },
+        {
+            "step": "lag_diff",
+            "input": "underlying_close",
+            "lag": 5,
+            "pct_change": true,
+            "output": "slope_5d"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "slope_5d"
+            ],
+            "window": 60,
+            "suffix": "_norm"
+        },
+        {
+            "step": "gap",
+            "open_col": "underlying_open",
+            "close_col": "underlying_close",
+            "output": "gap_raw"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "gap_raw"
+            ],
+            "window": 60,
+            "suffix": ""
+        },
+        {
+            "step": "arithmetic",
+            "formula": "gap_raw",
+            "output": "gap_norm"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "rsi",
+            "input": "underlying_close",
+            "period": 14,
+            "output": "rsi"
+        },
+        {
+            "step": "rolling_stat",
+            "input": "rsi",
+            "window": 3,
+            "stat": "mean",
+            "output": "rsi_smooth"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "atr",
+            "period": 14,
+            "output": "atr"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "atr",
+                "vix"
+            ],
+            "window": 60,
+            "suffix": "_norm"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "us_treasury_10y",
+                "volume"
+            ],
+            "window": 60,
+            "suffix": ""
+        },
+        {
+            "step": "arithmetic",
+            "formula": "us_treasury_10y",
+            "output": "rates_norm"
+        },
+        {
+            "step": "arithmetic",
+            "formula": "volume",
+            "output": "vol_norm"
+        }
+    ],
+    "dynamic_columns": [
+        "log_ret",
+        "log_ret_3",
+        "log_ret_5",
+        "log_ret_20",
+        "slope_5d_norm",
+        "gap_norm",
+        "rsi",
+        "rsi_smooth",
+        "atr_norm",
+        "vix_norm",
+        "rates_norm",
+        "vol_norm"
+    ],
+    "static_columns": [
+        "strike_distance",
+        "dte_normalized",
+        "is_call",
+        "moneyness"
+    ],
+    "targets": [
+        {
+            "name": "target_1",
+            "input": "underlying_close",
+            "horizon": 5,
+            "type": "log_future_return"
+        },
+        {
+            "name": "target_2",
+            "input": "underlying_close",
+            "horizon": 21,
+            "type": "log_future_return"
+        }
+    ],
+    "lookback_window": 60,
+    "target_col": "log_ret"
+}

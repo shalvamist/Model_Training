@@ -2,9 +2,17 @@
 
 A unified deep learning framework for financial time-series forecasting, specializing in regression and classification of asset returns. This library consolidates state-of-the-art architectures (Transfomers, Bi-LSTMs, Mixture-of-Experts) with robust financial engineering.
 
+## ⚙️ Data Engineering (New)
+
+The library now features a **GenericProcessor** driven by JSON configuration, replacing hardcoded feature logic. This allows for rapid experimentation with features like:
+
+*   **Financial**: Greeks, RSI, MACD, Bollinger Bands, ATR.
+*   **Signal Processing**: Fourier Transform (Spectral Entropy), Wavelet Transform (Ricker).
+*   **Regime Detection**: Gaussian Mixture Models (GMM) for volatility state classification.
+
 ## 🏗️ Architecture Overview
 
-The library supports two primary model families: **Universal Hybrid** (Standard) and **V17 Experimental** (Cutting Edge).
+The library supports three primary model families: **Universal Hybrid** (Standard), **V17 Experimental** (Cutting Edge), and **PatchTST** (Long-Horizon).
 
 ### 1. Hybrid Joint Network (Universal Standard)
 Combines the strengths of **LSTMs** (sequential local patterns) and **Transformers** (global attention) with a **Mixture-of-Experts (MoE)** head.
@@ -64,6 +72,17 @@ graph TD
     Output -->|"RevIN (Denormalize)"| FinalPred
 ```
 
+### 3. PatchTST (Long-Horizon Forecasting)
+State-of-the-art Transformer that treats **time-series patches** as tokens. This significantly reduces computation while capturing local semantic information better than point-wise attention.
+
+```mermaid
+graph LR
+    Input["Time Series (L, D)"] -->|"Patch & Embed"| Patches["Patches (N, P*D)"]
+    Patches -->|"Transformer Encoder"| Rep["Latent Representation"]
+    Rep -->|Pooling| Context
+    Context -->|Linear Head| Prediction
+```
+
 ---
 
 ## 📐 Mathematical Formulations
@@ -96,6 +115,23 @@ $$
 *   $\alpha$: Weight factor for the class (we weight **Bear** markets higher).
 *   $\gamma$ (Gamma): Focusing parameter (usually 2.0). Down-weights easy examples (Neutral days) to focus learning on hard examples (Crashes/Rallies).
 
+### Quantile Regression (Probabilistic)
+To predict prediction intervals (e.g., 10th and 90th percentiles), we use the **Pinball Loss**:
+
+$$
+L_{\tau}(y, \hat{y}) = \max(\tau(y - \hat{y}), (\tau - 1)(y - \hat{y}))
+$$
+
+where $\tau$ is the target quantile (e.g., 0.1, 0.5, 0.9). The model outputs multiple predictions per time step, corresponding to these quantiles.
+
+### Advanced Loss Functions
+*   **Huber Loss**: Robust regression loss that transitions from MSE to MAE for errors larger than $\delta$, reducing sensitivity to outliers.
+*   **Directional Loss**: Adds a penalty when the predicted sign disagrees with the target sign:
+
+$$
+L = (1 - \lambda) MSE + \lambda \cdot \text{mean}(|y - \hat{y}| \cdot \mathbb{I}_{\text{sign}(y) \neq \text{sign}(\hat{y})})
+$$
+
 ---
 
 ## 🛠️ Project Structure
@@ -122,9 +158,14 @@ Model_trading_training/
 
 ## 🚀 Usage
 
-**Train a new model:**
+**Train a V17 model:**
 ```bash
 python -m Model_trading_training.tools.train --config configs/templates/experimental_v17.json
+```
+
+**Train a PatchTST model (Long-Term):**
+```bash
+python -m Model_trading_training.tools.train --config configs/templates/patchtst_config.json
 ```
 
 **Evaluate an existing model:**

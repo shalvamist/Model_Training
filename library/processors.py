@@ -4,6 +4,8 @@ from scipy.stats import norm
 import yfinance as yf
 import logging
 from .utils import robust_normalize
+from .financial_engineer import FinancialEngineer
+from .feature_pipeline import TransformationPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -37,98 +39,7 @@ DATA_CONFIG = {
     }
 }
 
-class FinancialEngineer:
-    @staticmethod
-    def calculate_rsi(series, period=14):
-        delta = series.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / (loss + 1e-6)
-        return 100 - (100 / (1 + rs))
-
-    @staticmethod
-    def calculate_macd(series, fast=12, slow=26):
-        exp1 = series.ewm(span=fast, adjust=False).mean()
-        exp2 = series.ewm(span=slow, adjust=False).mean()
-        return exp1 - exp2
-
-    @staticmethod
-    def calculate_atr(high, low, close, period=14):
-        h_l = high - low
-        h_c = np.abs(high - close.shift())
-        l_c = np.abs(low - close.shift())
-        ranges = pd.concat([h_l, h_c, l_c], axis=1)
-        true_range = np.max(ranges, axis=1)
-        return true_range.rolling(window=period).mean()
-
-    @staticmethod
-    def calculate_bollinger_width(series, period=20, std_dev=2):
-        sma = series.rolling(window=period).mean()
-        std = series.rolling(window=period).std()
-        upper = sma + (std * std_dev)
-        lower = sma - (std * std_dev)
-        width = (upper - lower) / (sma + 1e-6)
-        return width
-
-    @staticmethod
-    def calculate_stochastic(high, low, close, period=14, smooth_k=3):
-        low_min = low.rolling(window=period).min()
-        high_max = high.rolling(window=period).max()
-        k = 100 * (close - low_min) / (high_max - low_min + 1e-6)
-        d = k.rolling(window=smooth_k).mean()
-        return k, d
-
-    @staticmethod
-    def calculate_williams_r(high, low, close, period=14):
-        hh = high.rolling(window=period).max()
-        ll = low.rolling(window=period).min()
-        wr = -100 * (hh - close) / (hh - ll + 1e-6)
-        return wr
-
-    @staticmethod
-    def calculate_roc(series, period=10):
-        return ((series - series.shift(period)) / (series.shift(period) + 1e-6)) * 100
-
-    @staticmethod
-    def calculate_rolling_skew(series, window=60):
-        return series.rolling(window=window).skew()
-
-    @staticmethod
-    def black_scholes_price_vectorized(S, K, T, r, sigma):
-        S = np.array(S, dtype=np.float32)
-        K = np.array(K, dtype=np.float32)
-        r = np.array(r, dtype=np.float32)
-        sigma = np.array(sigma, dtype=np.float32)
-        
-        T = np.maximum(T, 1e-5)
-        sigma = np.maximum(sigma, 1e-3)
-        S = np.maximum(S, 1e-6) 
-        
-        d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        d2 = d1 - sigma * np.sqrt(T)
-        
-        price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
-        return price
-    
-    @staticmethod
-    def black_scholes_greeks(S, K, T, r, sigma, option_type="call"):
-        T = np.maximum(T, 1e-5)
-        sigma = np.maximum(sigma, 1e-3)
-        S = np.maximum(S, 1e-6)
-        
-        d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        d2 = d1 - sigma * np.sqrt(T)
-        
-        if option_type == "call":
-            delta = norm.cdf(d1)
-            theta = (- (S * norm.pdf(d1) * sigma) / (2 * np.sqrt(T)) - r * K * np.exp(-r * T) * norm.cdf(d2)) / 365
-        else:
-            delta = norm.cdf(d1) - 1
-            theta = (- (S * norm.pdf(d1) * sigma) / (2 * np.sqrt(T)) + r * K * np.exp(-r * T) * norm.cdf(-d2)) / 365
-
-        gamma = norm.pdf(d1) / (S * sigma * np.sqrt(T))
-        vega = S * np.sqrt(T) * norm.pdf(d1) / 100 
-        return delta, gamma, theta, vega
+# FinancialEngineer class moved to financial_engineer.py
 
 class BaseProcessor:
     """Base class handling data fetching, cleaning, and sequence generation."""
@@ -257,8 +168,15 @@ class BaseProcessor:
         arr_time = df[['dow', 'moy']].values.astype(np.int64)
         
         # Targets
-        arr_y1 = df['target_1'].values.astype(np.float32)
-        arr_y2 = df['target_2'].values.astype(np.float32)
+        if 'target_1' in df.columns:
+            arr_y1 = df['target_1'].values.astype(np.float32)
+        else:
+            arr_y1 = np.zeros(len(df), dtype=np.float32)
+            
+        if 'target_2' in df.columns:
+            arr_y2 = df['target_2'].values.astype(np.float32)
+        else:
+            arr_y2 = np.zeros(len(df), dtype=np.float32)
         
         dates = df.index[seq_len:]
         
@@ -448,4 +366,76 @@ class ProcessorV15(ProcessorV13):
              
         df_proc[new_cols] = df_proc[new_cols].fillna(0)
         
-        return df_proc, dyn_cols, stat_cols
+        return self._verify_data(df_proc), dyn_cols, stat_cols
+        
+class GenericProcessor(BaseProcessor):
+    """
+    Generic Processor that builds features from a configuration pipeline.
+    Replaces hardcoded V11/V13/V15 processors.
+    """
+    def __init__(self, config):
+        super().__init__(config)
+        self.additional_tickers = config.get('extra_tickers', [])
+
+    def _fetch_extras(self, df, get_col_func):
+        # Fetch data for extra tickers defined in config
+        for tkr in self.additional_tickers:
+            # We assume we want the Close price by default for these extras
+            # If complex logic needed (e.g. Open/High), config needs to be richer.
+            # For now, mimicking V15: getting 'Close' and lowercasing ticker name as col
+            col_name = tkr.lower() # e.g. XLY -> xly
+            
+            # Allow config to specify mapping? e.g. {"ticker": "XLY", "col": "xly"}
+            # The current list is just strings.
+            
+            val = get_col_func(tkr, 'Close')
+            if val is not None:
+                df[col_name] = val.ffill()
+            else:
+                logger.warning(f"Could not fetch extra ticker: {tkr}")
+
+    def process(self, df):
+        if df.empty: return None, [], []
+        
+        # 1. Execute Pipeline
+        pipeline_config = self.config.get('feature_pipeline', [])
+        pipeline = TransformationPipeline(pipeline_config)
+        df = pipeline.run(df)
+        
+        # 2. Identify Dynamic Columns
+        # In generic config, we should explicitly list them, or user specifies regex?
+        # Ideally, config has "dynamic_columns": ["log_ret", "rsi_norm", ...]
+        dyn_cols = self.config.get('dynamic_columns', [])
+        
+        # If not provided, we might try to guess or require it. 
+        # For now, let's assume the user MUST provide it in config for GenericProcessor.
+        if not dyn_cols:
+             logger.warning("No 'dynamic_columns' found in config. Using all numeric columns except targets/static?")
+             # Fallback logic could be dangerous. Let's error or warn.
+        
+        # 3. Static Columns
+        stat_cols = self.config.get('static_columns', ["strike_distance", "dte_normalized", "is_call", "moneyness"])
+        
+        # 4. Defaults for Statics if missing
+        if 'strike_distance' not in df.columns: df['strike_distance'] = 0.0
+        if 'dte_normalized' not in df.columns: df['dte_normalized'] = 65.0/365.0
+        if 'is_call' not in df.columns: df['is_call'] = 1
+        if 'moneyness' not in df.columns: df['moneyness'] = 1.0
+        
+        # 5. Targets
+        # Also driven by config? 
+        targets = self.config.get('targets', [])
+        for t in targets:
+            start_col = t.get('input', 'underlying_close')
+            horizon = t.get('horizon', 5)
+            name = t.get('name', f'target_{horizon}')
+            type_ = t.get('type', 'log_future_return')
+            
+            if type_ == 'log_future_return':
+                df[name] = np.log(df[start_col].shift(-horizon) / df[start_col]).fillna(0)
+        
+        # 6. Time Features (Required by BaseProcessor.create_sequences)
+        if 'dow' not in df.columns: df['dow'] = df.index.dayofweek
+        if 'moy' not in df.columns: df['moy'] = df.index.month - 1
+        
+        return self._verify_data(df), dyn_cols, stat_cols

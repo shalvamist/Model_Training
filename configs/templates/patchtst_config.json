@@ -1,0 +1,82 @@
+{
+    "experiment_name": "patchtst_demo_v1",
+    "model_type": "patchtst",
+    "processor": "generic",
+    "use_gpu": false,
+    "batch_size": 32,
+    "epochs": 10,
+    "lr": 1e-4,
+    "loss_type": "quantile",
+    "quantiles": [
+        0.1,
+        0.5,
+        0.9
+    ],
+    "model_params": {
+        "hidden_size": 64,
+        "patch_len": 16,
+        "stride": 8,
+        "dropout": 0.1,
+        "trans_layers": 2
+    },
+    "feature_pipeline": [
+        {
+            "step": "log_return",
+            "cols": [
+                "Close",
+                "Volume"
+            ]
+        },
+        {
+            "step": "rolling_stat",
+            "col": "log_ret_Close",
+            "window": 20,
+            "funcs": [
+                "std"
+            ]
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "rsi",
+            "col": "Close",
+            "period": 14
+        },
+        {
+            "step": "fourier",
+            "input": "log_ret_Close",
+            "window": 60,
+            "output": "entropy_60"
+        },
+        {
+            "step": "wavelet",
+            "input": "log_ret_Close",
+            "widths": [
+                2,
+                5,
+                10
+            ],
+            "prefix": "wav"
+        },
+        {
+            "step": "regime_gmm",
+            "input": "log_ret_Close_std_20",
+            "n_components": 2,
+            "output": "regime_vol"
+        }
+    ],
+    "lookback_window": 64,
+    "forecast_horizon_1": 5,
+    "forecast_horizon_2": 21,
+    "feature_cols": [
+        "log_ret_Close",
+        "log_ret_Volume",
+        "log_ret_Close_std_20",
+        "rsi_14",
+        "entropy_60",
+        "wav_2",
+        "wav_5",
+        "wav_10",
+        "regime_vol"
+    ],
+    "target_col": "log_ret_Close"
+}

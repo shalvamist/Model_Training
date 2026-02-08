@@ -1,99 +1,167 @@
 import argparse
 import json
 import logging
+import os
 import sys
 import torch
-import os
-from Model_trading_training.library.factory import ModelFactory
-from Model_trading_training.library.trainer import ModelTrainer
+import numpy as np
+from torch.utils.data import DataLoader, TensorDataset
+
+# Add local path (root) to sys.path
+# This ensures "library" can be imported whether run from root or tools/
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+
+from library.processors import GenericProcessor
+from library.factory import ModelFactory
+from library.trainer import ModelTrainer
 
 # Configure Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', stream=sys.stdout)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 logger = logging.getLogger(__name__)
 
 def main():
-    parser = argparse.ArgumentParser(description="Train a Trading Model")
+    parser = argparse.ArgumentParser(description="Train a Trading Model from Config")
     parser.add_argument("--config", type=str, required=True, help="Path to JSON config file")
-    parser.add_argument("--device", type=str, default="cpu", help="Device (cpu/cuda)")
-    parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
-    parser.add_argument("--output", type=str, default="trained_model.pth", help="Output path for weights")
+    parser.add_argument("--epochs", type=int, help="Override epochs from config")
+    parser.add_argument("--batch_size", type=int, help="Override batch_size from config")
+    parser.add_argument("--lr", type=float, help="Override learning rate from config")
+    parser.add_argument("--force_cpu", action="store_true", help="Force CPU usage")
     args = parser.parse_args()
     
-    logger.info(f"Loading Config: {args.config}")
-    with open(args.config, 'r') as f:
+    config_path = args.config
+    if not os.path.exists(config_path):
+        logger.error(f"Config file not found: {config_path}")
+        sys.exit(1)
+        
+    logger.info(f"Loading config from {config_path}")
+    with open(config_path, 'r') as f:
         config = json.load(f)
         
-    # Override config with args if needed
-    config['epochs'] = args.epochs
-    
-    # 1. Get Processor
-    logger.info(f"Initializing Processor: {config.get('processor_version', 'v11')}")
-    processor = ModelFactory.get_processor(config.get('processor_version', 'v11'), config)
-    
-    # 2. Fetch Data
-    df = processor.fetch_data()
-    if df.empty:
-        logger.error("Failed to fetch data.")
-        return
+    # Override Config with CLI Args
+    if args.epochs: config['epochs'] = args.epochs
+    if args.batch_size: config['batch_size'] = args.batch_size
+    if args.lr: config['lr'] = args.lr
+    if args.force_cpu: config['use_gpu'] = False
         
-    logger.info(f"Data Fetched: {len(df)} rows")
+    # Set Device
+    device = "cuda" if torch.cuda.is_available() and config.get("use_gpu", False) else "cpu"
+    logger.info(f"Using device: {device}")
     
-    # 3. Process & Create Sequences
+    # 1. Data Processing
+    logger.info("Initializing Processor...")
+    processor_type = config.get("processor", "generic")
+    processor = ModelFactory.get_processor(processor_type, config)
+    df = processor.fetch_data()
+    
+    if df.empty:
+        logger.error("No data fetched. Exiting.")
+        sys.exit(1)
+        
     df_proc, dyn_cols, stat_cols = processor.process(df)
     
-    # Update Config with potentially dynamic columns if not present
-    if 'input_dim' not in config:
-        config['input_dim'] = len(dyn_cols)
-    if 'static_dim' not in config:
-        config['static_dim'] = len(stat_cols)
+    # Create Sequences
+    logger.info("Creating Sequences...")
+    X_dyn, X_stat, X_time, Y_1, Y_2, dates = processor.create_sequences(df_proc, dyn_cols, stat_cols)
     
-    data = processor.create_sequences(df_proc, dyn_cols, stat_cols)
+    if len(X_dyn) == 0:
+        logger.error("No sequences created. Check data length vs seq_length.")
+        sys.exit(1)
+        
+    # 3-Way Chronological Split: Train / Val / Test
+    # Get split parameters from config (in years)
+    train_years = config.get('train_years', 13)
+    val_years = config.get('val_years', 2)
+    test_years = config.get('test_years', 2)
+    total_years = train_years + val_years + test_years
     
-    # Pack into Loaders (Simplified for tool)
-    from torch.utils.data import DataLoader, TensorDataset
-    X_d, X_s, X_t, Y_1, Y_2, dates = data
+    # Calculate split indices based on proportions
+    n_samples = len(X_dyn)
+    train_frac = train_years / total_years
+    val_frac = val_years / total_years
     
-    # Simple Train/Val Split (Last 20% Val)
-    split_idx = int(len(X_d) * 0.8)
+    train_end = int(n_samples * train_frac)
+    val_end = int(n_samples * (train_frac + val_frac))
     
-    def to_tensor(arr): return torch.tensor(arr, dtype=torch.float32)
-    def to_long(arr): return torch.tensor(arr, dtype=torch.long)
+    logger.info(f"Data Split: Train={train_years}y ({train_end} samples), Val={val_years}y ({val_end-train_end} samples), Test={test_years}y ({n_samples-val_end} samples)")
     
-    # Targets: Reg (Float), Cls (Long)
-    # create_sequences returned raw reg targets. We need to classify them.
-    # Simple Logic: > 2% Bull, < -2% Bear
-    Y_1_c = np.ones_like(Y_1, dtype=int)
-    Y_1_c[Y_1 > 0.02] = 2; Y_1_c[Y_1 < -0.02] = 0
+    # Derive classification targets from regression targets
+    # Bear (0): target < -2%, Neutral (1): -2% to +2%, Bull (2): > +2%
+    def classify_return(returns):
+        """Convert continuous returns to 3-class labels"""
+        labels = np.zeros(len(returns), dtype=np.int64)
+        labels[returns > 0.02] = 2   # Bull
+        labels[returns < -0.02] = 0  # Bear  
+        labels[(returns >= -0.02) & (returns <= 0.02)] = 1  # Neutral
+        return labels
     
-    Y_2_c = np.ones_like(Y_2, dtype=int)
-    Y_2_c[Y_2 > 0.04] = 2; Y_2_c[Y_2 < -0.04] = 0
+    Y_1_cls = classify_return(Y_1)
+    Y_2_cls = classify_return(Y_2)
     
-    train_ds = TensorDataset(
-        to_tensor(X_d[:split_idx]), to_tensor(X_s[:split_idx]), to_long(X_t[:split_idx]),
-        to_tensor(Y_1[:split_idx]), to_long(Y_1_c[:split_idx]),
-        to_tensor(Y_2[:split_idx]), to_long(Y_2_c[:split_idx])
+    train_data = TensorDataset(
+        torch.tensor(X_dyn[:train_end], dtype=torch.float32),
+        torch.tensor(X_stat[:train_end], dtype=torch.float32),
+        torch.tensor(X_time[:train_end], dtype=torch.long),
+        torch.tensor(Y_1[:train_end], dtype=torch.float32), # Target 1 (Reg)
+        torch.tensor(Y_1_cls[:train_end], dtype=torch.long), # Target 1 (Class)
+        torch.tensor(Y_2[:train_end], dtype=torch.float32), # Target 2 (Reg)
+        torch.tensor(Y_2_cls[:train_end], dtype=torch.long)  # Target 2 (Class)
     )
     
-    val_ds = TensorDataset(
-        to_tensor(X_d[split_idx:]), to_tensor(X_s[split_idx:]), to_long(X_t[split_idx:]),
-        to_tensor(Y_1[split_idx:]), to_long(Y_1_c[split_idx:]),
-        to_tensor(Y_2[split_idx:]), to_long(Y_2_c[split_idx:])
+    val_data = TensorDataset(
+        torch.tensor(X_dyn[train_end:val_end], dtype=torch.float32),
+        torch.tensor(X_stat[train_end:val_end], dtype=torch.float32),
+        torch.tensor(X_time[train_end:val_end], dtype=torch.long),
+        torch.tensor(Y_1[train_end:val_end], dtype=torch.float32),
+        torch.tensor(Y_1_cls[train_end:val_end], dtype=torch.long),
+        torch.tensor(Y_2[train_end:val_end], dtype=torch.float32),
+        torch.tensor(Y_2_cls[train_end:val_end], dtype=torch.long)
     )
     
-    train_loader = DataLoader(train_ds, batch_size=config.get('batch_size', 64), shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=config.get('batch_size', 64), shuffle=False)
+    train_loader = DataLoader(train_data, batch_size=config.get("batch_size", 32), shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=config.get("batch_size", 32))
     
-    # 4. Create Model
-    logger.info("Initializing Model...")
-    model = ModelFactory.create_model(config)
+    # 2. Model Creation
+    logger.info("Building Model...")
+    # Inject input dimensions into config for factory
+    config['input_dim'] = len(dyn_cols)
+    config['static_dim'] = len(stat_cols)
     
-    # 5. Train
-    trainer = ModelTrainer(model, config, device=args.device)
-    best_score = trainer.run_training(train_loader, val_loader, epochs=args.epochs)
+    model = ModelFactory.create_model(config).to(device)
     
-    logger.info(f"Training Complete. Best Score: {best_score:.4f}")
-    trainer.save_checkpoint(args.output)
-    logger.info(f"Model saved to {args.output}")
+    # 3. Training
+    logger.info("Starting Training...")
+    trainer = ModelTrainer(model, config, device=device)
+    
+    # Weights Dir
+    os.makedirs("weights", exist_ok=True)
+    # Determine model name from config file path if possible, else use experiment_name
+    if args.config:
+        config_name = os.path.splitext(os.path.basename(args.config))[0]
+        experiment_name = config_name
+    else:
+        experiment_name = config.get('experiment_name', 'model')
+        
+    save_path = os.path.join("weights", f"{experiment_name}.pth")
+    
+    epochs = config.get("epochs", 10)
+    best_score = trainer.run_training(
+        train_loader, val_loader, 
+        epochs=epochs, 
+        save_path=save_path,
+        config=config,
+        dyn_cols=dyn_cols,
+        stat_cols=stat_cols
+    )
+            
+    logger.info(f"Training Completed. Best Score: {best_score:.4f}")
 
 if __name__ == "__main__":
     main()

@@ -10,8 +10,12 @@ logger = logging.getLogger(__name__)
 class MetricsCalculator:
     @staticmethod
     def get_f1_5_score(true, pred):
-        """F1.5 Score favors Recall (Safety) over Precision"""
-        return fbeta_score(true, pred, beta=1.5, labels=[0], average=None, zero_division=0)[0]
+        """F1.5 Score favors Recall (Safety) over Precision
+        
+        Returns macro-averaged F1.5 across all classes (Bear, Neutral, Bull)
+        to properly track model performance during training.
+        """
+        return fbeta_score(true, pred, beta=1.5, average='macro', zero_division=0)
     
     @staticmethod
     def get_precision_recall(true, pred, focus_class=0):

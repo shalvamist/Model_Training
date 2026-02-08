@@ -267,10 +267,19 @@ class ExperimentalNetwork(nn.Module):
         use_kan_experts = config.get('use_kan', True)
         n_experts = config.get('n_experts', 4)
         
-        self.head_1_reg = MixtureOfExperts(self.hidden_size, 1, n_experts, self.hidden_size // 2, use_kan=use_kan_experts)
+        # Determine output dimension based on loss type
+        loss_type = config.get('loss_type', 'mse')
+        quantiles = config.get('quantiles', [])
+        
+        if loss_type == 'quantile' and quantiles:
+            reg_output_dim = len(quantiles)
+        else:
+            reg_output_dim = 1
+        
+        self.head_1_reg = MixtureOfExperts(self.hidden_size, reg_output_dim, n_experts, self.hidden_size // 2, use_kan=use_kan_experts)
         self.head_1_cls = MixtureOfExperts(self.hidden_size, 3, n_experts, self.hidden_size // 2, use_kan=use_kan_experts)
         
-        self.head_2_reg = MixtureOfExperts(self.hidden_size, 1, n_experts, self.hidden_size // 2, use_kan=use_kan_experts)
+        self.head_2_reg = MixtureOfExperts(self.hidden_size, reg_output_dim, n_experts, self.hidden_size // 2, use_kan=use_kan_experts)
         self.head_2_cls = MixtureOfExperts(self.hidden_size, 3, n_experts, self.hidden_size // 2, use_kan=use_kan_experts)
 
     def forward(self, x_dyn, x_stat, x_time):
@@ -314,3 +323,65 @@ class ExperimentalNetwork(nn.Module):
         # We will NOT denrom output against the input statistics because output domain != input domain.
         
         return reg_1, cls_1, reg_2, cls_2
+
+class PatchEmbedding(nn.Module):
+    def __init__(self, patch_len, stride, d_model, input_dim):
+        super().__init__()
+        self.patch_len = patch_len
+        self.stride = stride
+        self.patch_dim = input_dim * patch_len
+        self.proj = nn.Linear(self.patch_dim, d_model)
+        self.norm = nn.LayerNorm(self.patch_dim)
+
+    def forward(self, x):
+        # x: (B, L, D) -> (B, N, P*D)
+        B, L, D = x.shape
+        # Unfold logic: (B, D, L) -> unfold -> (B, D, N, P) -> (B, N, D*P)
+        x = x.permute(0, 2, 1)
+        x_unfolded = x.unfold(dimension=2, size=self.patch_len, step=self.stride)
+        x_unfolded = x_unfolded.permute(0, 2, 1, 3).contiguous()
+        x_flat = x_unfolded.view(B, -1, D * self.patch_len)
+        return self.proj(self.norm(x_flat))
+
+class PatchTST(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_size = config['hidden_size']
+        dropout = config.get('dropout', 0.1)
+        patch_len = config.get('patch_len', 16)
+        stride = config.get('stride', 8)
+        
+        input_dim = config.get('input_dim')
+        if not input_dim:
+            input_dim = len(config.get('feature_cols', []))
+            if input_dim == 0: input_dim = 1 # fallback
+            
+        self.patch_embed = PatchEmbedding(patch_len, stride, self.hidden_size, input_dim)
+        self.pos_encoder = PositionalEncoding(self.hidden_size)
+        
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.hidden_size, 
+            nhead=4, 
+            dim_feedforward=self.hidden_size*4, 
+            dropout=dropout,
+            batch_first=True, 
+            norm_first=True, 
+            activation="gelu"
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=config.get('trans_layers', 2))
+        self.pool = nn.AdaptiveAvgPool1d(1)
+        # Simple heads
+        self.head_1_reg = nn.Linear(self.hidden_size, 1)
+        self.head_1_cls = nn.Linear(self.hidden_size, 3)
+        self.head_2_reg = nn.Linear(self.hidden_size, 1)
+        self.head_2_cls = nn.Linear(self.hidden_size, 3)
+
+    def forward(self, x_dyn, x_stat, x_time):
+        x = self.patch_embed(x_dyn)
+        x = self.pos_encoder(x)
+        x = self.transformer(x)
+        # Pool: (B, N, H) -> (B, H)
+        x = x.transpose(1, 2)
+        x = self.pool(x).squeeze(2)
+        
+        return self.head_1_reg(x), self.head_1_cls(x), self.head_2_reg(x), self.head_2_cls(x)
