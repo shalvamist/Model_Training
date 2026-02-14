@@ -1,0 +1,50 @@
+{
+  "model_name": "real_economy_rotator_optimized_rank2",
+  "architecture": "hybrid_v12",
+  "input_features": {
+    "dynamic_features": 7,
+    "static_features": 0,
+    "dynamic_feature_names": [
+      "log_ret",
+      "log_ret_5",
+      "log_ret_21",
+      "ratio_hard_soft_norm",
+      "ratio_industrial_norm",
+      "vix_norm",
+      "^ovx_norm"
+    ],
+    "static_feature_names": []
+  },
+  "outputs": {
+    "regression_heads": 2,
+    "classification_heads": 2,
+    "regression_targets": [
+      "target_1",
+      "target_2"
+    ],
+    "classification_classes": [
+      "Bear (0)",
+      "Neutral (1)",
+      "Bull (2)"
+    ],
+    "classification_thresholds": {
+      "bear": -0.02,
+      "neutral_min": -0.02,
+      "neutral_max": 0.02,
+      "bull": 0.02
+    }
+  },
+  "hyperparameters": {
+    "hidden_size": 256,
+    "lstm_layers": 2,
+    "trans_layers": 7,
+    "dropout": 0.32022440950935976,
+    "learning_rate": 0.00018152283730370346,
+    "batch_size": 32
+  },
+  "training_info": {
+    "epochs": 50,
+    "loss_type": "focal",
+    "cls_weight": 0.8
+  }
+}

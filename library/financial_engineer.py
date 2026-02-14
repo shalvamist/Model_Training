@@ -228,3 +228,79 @@ class FinancialEngineer:
             remapped_labels[labels == original_label] = i
             
         return remapped_labels
+
+    @staticmethod
+    def calculate_triple_barrier_labels(prices, volatility, vertical_barrier=21, sl_tp_multiplier=2.0):
+        """
+        Triple Barrier Method (Vectorized-ish).
+        
+        Args:
+            prices: pd.Series of labels (Close prices)
+            volatility: pd.Series of daily volatility (e.g. Daily Return StdDev or ATR).
+                        If None, uses fixed 2% barrier.
+            vertical_barrier: int, max holding days.
+            sl_tp_multiplier: float, barrier width in units of volatility.
+        
+        Returns:
+            pd.Series of labels:
+                0 = Lower Barrier Hit (Bear)
+                1 = Vertical Barrier Hit (Neutral)
+                2 = Upper Barrier Hit (Bull)
+        """
+        labels = pd.Series(index=prices.index, data=1.0) # Default Neutral
+        
+        # Convert to numpy for speed
+        p_arr = prices.values
+        idx = prices.index
+        
+        # Volatility Barrier Height
+        if volatility is not None:
+            # Dynamic barrier: e.g. 2 * Daily_Vol
+            # Note: Volatility should be in % terms (0.01 = 1%)
+            barriers = volatility.values * sl_tp_multiplier
+        else:
+            # Fixed 2% barrier
+            barriers = np.full(len(prices), 0.02)
+            
+        # Iterate (Vectorization hard for path dependency)
+        # We can limit the loop to just jumping 'vertical_barrier'
+        # But Triple Barrier looks at EVERYTHING in between [t, t+vert]
+        
+        # Numba would be best, but standard loop OK for <10k points
+        limit = len(prices) - vertical_barrier
+        
+        for t in range(limit):
+            current_price = p_arr[t]
+            barrier = barriers[t]
+            
+            upper = current_price * (1 + barrier)
+            lower = current_price * (1 - barrier)
+            
+            # Slice the future window
+            window = p_arr[t+1 : t+vertical_barrier+1]
+            
+            # Find first hit
+            # We need the indices of hits
+            # upper_hits = np.where(window >= upper)[0]
+            # lower_hits = np.where(window <= lower)[0]
+            
+            # Faster: check > upper
+            is_upper = window >= upper
+            is_lower = window <= lower
+            
+            if not is_upper.any() and not is_lower.any():
+                labels.iloc[t] = 1 # vertical hit
+                continue
+                
+            first_upper = np.argmax(is_upper) if is_upper.any() else 9999
+            first_lower = np.argmax(is_lower) if is_lower.any() else 9999
+            
+            if first_upper < first_lower:
+                labels.iloc[t] = 2 # Bull
+            elif first_lower < first_upper:
+                labels.iloc[t] = 0 # Bear
+            else:
+                # Same step? Rare. Prioritize Bear or Neutral?
+                labels.iloc[t] = 1 
+                
+        return labels

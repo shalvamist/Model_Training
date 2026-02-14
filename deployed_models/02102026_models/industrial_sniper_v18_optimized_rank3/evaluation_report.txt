@@ -1,0 +1,45 @@
+==================================================
+EVALUATION REPORT: config.json
+==================================================
+Model ID: N/A
+Test Samples: 990
+
+--- Horizon 1 (Short) Horizon ---
+[Classification] Accuracy: 0.5595959595959596
+[Classification] F1 (Macro): 0.3066
+[Classification] MCC: 0.0151
+[Regression]     MAE: 0.01788 | RMSE: 0.02376 | R2: -0.1300
+[Directional]    Reg Direction Acc: 58.48%
+[Trading Sim]    Total Return: -7.70% (Market: 70.15%)
+[Trading Sim]    Win Rate: 27.66% | Sharpe: -0.29
+
+--- Horizon 2 (Medium) Horizon ---
+[Classification] Accuracy: 0.15757575757575756
+[Classification] F1 (Macro): 0.1338
+[Classification] MCC: -0.0480
+[Regression]     MAE: 0.03622 | RMSE: 0.04693 | R2: -0.3253
+[Directional]    Reg Direction Acc: 57.98%
+[Trading Sim]    Total Return: 56.16% (Market: 70.15%)
+[Trading Sim]    Win Rate: 35.13% | Sharpe: 0.78
+
+=== Detailed Classification Report (H1) ===
+              precision    recall  f1-score   support
+
+        Bear       0.16      0.26      0.20       142
+     Neutral       0.68      0.77      0.72       674
+        Bull       0.00      0.00      0.00       174
+
+    accuracy                           0.56       990
+   macro avg       0.28      0.34      0.31       990
+weighted avg       0.49      0.56      0.52       990
+
+=== Detailed Classification Report (H2) ===
+              precision    recall  f1-score   support
+
+        Bear       0.05      0.15      0.07       110
+     Neutral       0.62      0.01      0.01       674
+        Bull       0.21      0.66      0.31       206
+
+    accuracy                           0.16       990
+   macro avg       0.29      0.27      0.13       990
+weighted avg       0.47      0.16      0.08       990

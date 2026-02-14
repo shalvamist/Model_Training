@@ -100,3 +100,77 @@ class DirectionalLoss(nn.Module):
         if torch.isnan(penalty): penalty = 0.0 # if no mismatch
         
         return (1 - self.lambda_dir) * base + self.lambda_dir * penalty
+
+class AsymmetricDirectionalLoss(nn.Module):
+    """
+    Penalizes directional errors more heavily than magnitude errors.
+    If Sign(Pred) != Sign(Target): Loss = MSE * penalty_factor
+    Else: Loss = MSE
+    """
+    def __init__(self, penalty_factor=2.0):
+        super().__init__()
+        self.penalty_factor = penalty_factor
+        
+    def forward(self, pred, target):
+        mse = (pred - target) ** 2
+        
+        # Sign mismatch mask (handling 0s gracefully)
+        true_sign = torch.sign(target)
+        pred_sign = torch.sign(pred)
+        
+        # Mismatch: sign product is negative
+        mismatch = (true_sign * pred_sign) < 0
+        
+        # Apply penalty where mismatch is True
+        weighted_mse = torch.where(mismatch, mse * self.penalty_factor, mse)
+        
+        return torch.mean(weighted_mse)
+
+class DirectionalFocalLoss(nn.Module):
+    """
+    V19 Composite Loss optimized for directional accuracy.
+    Combines:
+    1. FocalLoss on classification (hard labels)
+    2. Regression sign agreement penalty
+    3. Soft directional BCE (binary: up or down)
+    
+    Total = alpha * FocalCls + beta * RegSignLoss + gamma * DirBCE
+    """
+    def __init__(self, alpha=0.4, beta=0.3, gamma=0.3, focal_gamma=2.0, penalty_factor=3.0):
+        super().__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.focal = FocalLoss(gamma=focal_gamma)
+        self.penalty_factor = penalty_factor
+        self.bce = nn.BCEWithLogitsLoss()
+        
+    def forward(self, reg_pred, cls_pred, dir_pred, reg_target, cls_target):
+        """
+        Args:
+            reg_pred: (B, 1) Regression prediction
+            cls_pred: (B, 3) Classification logits
+            dir_pred: (B, 1) Directional logit (sigmoid → P(return > 0))
+            reg_target: (B,) or (B,1) True return
+            cls_target: (B,) Class label (0=bear, 1=neutral, 2=bull)
+        """
+        # 1. Focal Classification Loss
+        loss_cls = self.focal(cls_pred, cls_target)
+        
+        # 2. Regression Sign Agreement
+        if reg_target.dim() == 1:
+            reg_target = reg_target.view(-1, 1)
+        mse = (reg_pred - reg_target) ** 2
+        true_sign = torch.sign(reg_target)
+        pred_sign = torch.sign(reg_pred)
+        mismatch = (true_sign * pred_sign) < 0
+        weighted_mse = torch.where(mismatch, mse * self.penalty_factor, mse)
+        loss_reg = torch.mean(weighted_mse)
+        
+        # 3. Binary Directional Loss
+        # Target: 1 if return > 0, 0 if return <= 0
+        dir_target = (reg_target > 0).float()
+        loss_dir = self.bce(dir_pred, dir_target)
+        
+        return self.alpha * loss_cls + self.beta * loss_reg + self.gamma * loss_dir
+

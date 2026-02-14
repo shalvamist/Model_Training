@@ -1,0 +1,50 @@
+{
+  "model_name": "industrial_sniper_v18_optimized_rank3",
+  "architecture": "experimental_v17",
+  "input_features": {
+    "dynamic_features": 7,
+    "static_features": 0,
+    "dynamic_feature_names": [
+      "log_ret",
+      "log_ret_3",
+      "log_ret_5",
+      "gap_raw_norm",
+      "rsi_3_norm",
+      "vol_spike_norm",
+      "vix_norm"
+    ],
+    "static_feature_names": []
+  },
+  "outputs": {
+    "regression_heads": 2,
+    "classification_heads": 2,
+    "regression_targets": [
+      "target_1",
+      "target_2"
+    ],
+    "classification_classes": [
+      "Bear (0)",
+      "Neutral (1)",
+      "Bull (2)"
+    ],
+    "classification_thresholds": {
+      "bear": -0.02,
+      "neutral_min": -0.02,
+      "neutral_max": 0.02,
+      "bull": 0.02
+    }
+  },
+  "hyperparameters": {
+    "hidden_size": 256,
+    "lstm_layers": 4,
+    "trans_layers": 2,
+    "dropout": 0.16065654577988003,
+    "learning_rate": 8.288805763066089e-05,
+    "batch_size": 32
+  },
+  "training_info": {
+    "epochs": 150,
+    "loss_type": "focal",
+    "cls_weight": 0.8
+  }
+}

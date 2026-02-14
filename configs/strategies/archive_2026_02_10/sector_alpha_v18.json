@@ -1,5 +1,5 @@
 {
-    "experment_name": "sector_alpha_rotator",
+    "experment_name": "sector_alpha_rotator_v18",
     "processor": "generic",
     "model_type": "experimental_v17",
     "use_revin": true,
@@ -9,17 +9,18 @@
     "train_years": 13,
     "val_years": 2,
     "test_years": 2,
-    "batch_size": 32,
-    "epochs": 50,
-    "early_stopping_patience": 10,
-    "hidden_size": 64,
+    "batch_size": 64,
+    "epochs": 60,
+    "early_stopping_patience": 12,
+    "hidden_size": 512,
     "n_heads": 4,
-    "dropout": 0.2,
-    "lr": 0.0001,
-    "lstm_layers": 2,
-    "trans_layers": 2,
+    "dropout": 0.15,
+    "lr": 0.00006,
+    "lstm_layers": 8,
+    "trans_layers": 4,
     "n_experts": 8,
-    "loss_type": "focal",
+    "loss_type": "asymmetric_directional",
+    "asymmetric_penalty": 3.0,
     "extra_tickers": [
         "XLY",
         "XLP",
@@ -33,7 +34,8 @@
             "output": "log_ret",
             "lags": [
                 5,
-                20
+                20,
+                60
             ]
         },
         {
@@ -69,7 +71,7 @@
                 "us_treasury_10y",
                 "vix"
             ],
-            "window": 60,
+            "window": 90,
             "suffix": "_norm"
         }
     ],
@@ -77,6 +79,7 @@
         "log_ret",
         "log_ret_5",
         "log_ret_20",
+        "log_ret_60",
         "ratio_risk_norm",
         "ratio_growth_norm",
         "rsi_risk_norm",
@@ -104,44 +107,8 @@
             "type": "log_future_return"
         }
     ],
-    "lookback_window": 60,
-    "optuna": {
-        "lr": [
-            1e-5,
-            5e-4
-        ],
-        "batch_size": [
-            32,
-            64,
-            128,
-            256
-        ],
-        "hidden_size": [
-            128,
-            256,
-            512
-        ],
-        "lstm_layers": [
-            2,
-            4,
-            6,
-            8
-        ],
-        "trans_layers": [
-            2,
-            4,
-            8,
-            16
-        ],
-        "n_experts": [
-            8,
-            16,
-            32
-        ],
-        "dropout": [
-            0.1,
-            0.3
-        ]
-    },
-    "target_col": "target_5d"
+    "lookback_window": 90,
+    "target_col": "target_5d",
+    "input_dim": 10,
+    "static_dim": 4
 }

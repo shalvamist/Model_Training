@@ -69,20 +69,39 @@ def main():
     
     # Create Sequences
     logger.info("Creating Sequences...")
-    X_dyn, X_stat, X_time, Y_1, Y_2, dates = processor.create_sequences(df_proc, dyn_cols, stat_cols)
+    sequences = processor.create_sequences(df_proc, dyn_cols, stat_cols)
+    
+    # Handle variable return length (V19=6, V20=8)
+    if len(sequences) == 8:
+        X_dyn, X_stat, X_time, Y_1, Y_2, dates, Y_1_cls, Y_2_cls = sequences
+        logger.info("Loaded Pre-Calculated Classification Targets (V20 Triple Barrier)")
+    else:
+        X_dyn, X_stat, X_time, Y_1, Y_2, dates = sequences
+        
+        # Derive classification targets from regression targets (V19 Logic)
+        cls_threshold = config.get('cls_threshold', 0.02)
+        logger.info(f"Deriving Classification Targets (Threshold: ±{cls_threshold*100:.1f}%)")
+        
+        def classify_return(returns, thresh):
+            labels = np.zeros(len(returns), dtype=np.int64)
+            labels[returns > thresh] = 2   # Bull
+            labels[returns < -thresh] = 0  # Bear  
+            labels[(returns >= -thresh) & (returns <= thresh)] = 1  # Neutral
+            return labels
+        
+        Y_1_cls = classify_return(Y_1, cls_threshold)
+        Y_2_cls = classify_return(Y_2, cls_threshold)
     
     if len(X_dyn) == 0:
         logger.error("No sequences created. Check data length vs seq_length.")
         sys.exit(1)
         
     # 3-Way Chronological Split: Train / Val / Test
-    # Get split parameters from config (in years)
     train_years = config.get('train_years', 13)
     val_years = config.get('val_years', 2)
     test_years = config.get('test_years', 2)
     total_years = train_years + val_years + test_years
     
-    # Calculate split indices based on proportions
     n_samples = len(X_dyn)
     train_frac = train_years / total_years
     val_frac = val_years / total_years
@@ -91,19 +110,6 @@ def main():
     val_end = int(n_samples * (train_frac + val_frac))
     
     logger.info(f"Data Split: Train={train_years}y ({train_end} samples), Val={val_years}y ({val_end-train_end} samples), Test={test_years}y ({n_samples-val_end} samples)")
-    
-    # Derive classification targets from regression targets
-    # Bear (0): target < -2%, Neutral (1): -2% to +2%, Bull (2): > +2%
-    def classify_return(returns):
-        """Convert continuous returns to 3-class labels"""
-        labels = np.zeros(len(returns), dtype=np.int64)
-        labels[returns > 0.02] = 2   # Bull
-        labels[returns < -0.02] = 0  # Bear  
-        labels[(returns >= -0.02) & (returns <= 0.02)] = 1  # Neutral
-        return labels
-    
-    Y_1_cls = classify_return(Y_1)
-    Y_2_cls = classify_return(Y_2)
     
     train_data = TensorDataset(
         torch.tensor(X_dyn[:train_end], dtype=torch.float32),

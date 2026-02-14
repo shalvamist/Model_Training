@@ -250,6 +250,56 @@ def step_regime_gmm(df, config):
         
     return df
 
+@FeatureRegistry.register('bollinger_position')
+def step_bollinger(df, config):
+    """Where price sits within Bollinger Bands (0=lower, 0.5=middle, 1=upper)."""
+    col = config.get('input', 'underlying_close')
+    window = config.get('window', 20)
+    n_std = config.get('n_std', 2.0)
+    out = config.get('output', f'bb_pos_{window}')
+    
+    sma = df[col].rolling(window).mean()
+    std = df[col].rolling(window).std()
+    upper = sma + n_std * std
+    lower = sma - n_std * std
+    
+    band_width = upper - lower
+    df[out] = ((df[col] - lower) / (band_width + 1e-8)).clip(0, 1).fillna(0.5)
+    return df
+
+@FeatureRegistry.register('volume_ratio')
+def step_volume_ratio(df, config):
+    """Current volume relative to its moving average — detects volume surges."""
+    col = config.get('input', 'volume')
+    window = config.get('window', 20)
+    out = config.get('output', f'vol_ratio_{window}')
+    
+    vol_sma = df[col].rolling(window).mean()
+    df[out] = (df[col] / (vol_sma + 1e-8)).fillna(1.0).clip(0, 5)
+    return df
+
+@FeatureRegistry.register('close_vs_ma')
+def step_close_vs_ma(df, config):
+    """Percentage distance of close from its moving average."""
+    col = config.get('input', 'underlying_close')
+    window = config.get('window', 7)
+    out = config.get('output', f'close_vs_ma{window}')
+    
+    ma = df[col].rolling(window).mean()
+    df[out] = ((df[col] - ma) / (ma + 1e-8)).fillna(0)
+    return df
+
+@FeatureRegistry.register('roc')
+def step_roc(df, config):
+    """Rate of Change: (price - price_n) / price_n — pure momentum."""
+    col = config.get('input', 'underlying_close')
+    period = config.get('period', 3)
+    out = config.get('output', f'roc_{period}')
+    
+    shifted = df[col].shift(period)
+    df[out] = ((df[col] - shifted) / (shifted + 1e-8)).fillna(0)
+    return df
+
 class TransformationPipeline:
     def __init__(self, config_steps):
         self.steps = config_steps

@@ -1,0 +1,146 @@
+{
+    "experment_name": "sector_alpha_rotator",
+    "processor": "generic",
+    "model_type": "experimental_v17",
+    "use_revin": true,
+    "bidirectional": true,
+    "use_kan": true,
+    "use_gpu": true,
+    "train_years": 13,
+    "val_years": 2,
+    "test_years": 2,
+    "batch_size": 64,
+    "epochs": 50,
+    "early_stopping_patience": 10,
+    "hidden_size": 512,
+    "n_heads": 4,
+    "dropout": 0.19700863602157143,
+    "lr": 0.00012315523111745586,
+    "lstm_layers": 4,
+    "trans_layers": 2,
+    "n_experts": 4,
+    "loss_type": "focal",
+    "extra_tickers": [
+        "XLY",
+        "XLP",
+        "XLK",
+        "XLU"
+    ],
+    "feature_pipeline": [
+        {
+            "step": "log_return",
+            "input": "underlying_close",
+            "output": "log_ret",
+            "lags": [
+                5,
+                20
+            ]
+        },
+        {
+            "step": "arithmetic",
+            "formula": "xly / (xlp + 1e-6)",
+            "output": "ratio_risk"
+        },
+        {
+            "step": "arithmetic",
+            "formula": "xlk / (xlu + 1e-6)",
+            "output": "ratio_growth"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "rsi",
+            "input": "ratio_risk",
+            "period": 14,
+            "output": "rsi_risk"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "macd",
+            "input": "ratio_growth",
+            "output": "macd_growth"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "ratio_risk",
+                "ratio_growth",
+                "rsi_risk",
+                "macd_growth",
+                "us_treasury_10y",
+                "vix"
+            ],
+            "window": 60,
+            "suffix": "_norm"
+        }
+    ],
+    "dynamic_columns": [
+        "log_ret",
+        "log_ret_5",
+        "log_ret_20",
+        "ratio_risk_norm",
+        "ratio_growth_norm",
+        "rsi_risk_norm",
+        "macd_growth_norm",
+        "us_treasury_10y_norm",
+        "vix_norm"
+    ],
+    "static_columns": [
+        "strike_distance",
+        "dte_normalized",
+        "is_call",
+        "moneyness"
+    ],
+    "targets": [
+        {
+            "name": "target_1",
+            "input": "underlying_close",
+            "horizon": 5,
+            "type": "log_future_return"
+        },
+        {
+            "name": "target_2",
+            "input": "underlying_close",
+            "horizon": 21,
+            "type": "log_future_return"
+        }
+    ],
+    "lookback_window": 60,
+    "optuna": {
+        "lr": [
+            1e-05,
+            0.0005
+        ],
+        "batch_size": [
+            32,
+            64,
+            128
+        ],
+        "hidden_size": [
+            128,
+            256,
+            512
+        ],
+        "lstm_layers": [
+            2,
+            4,
+            8
+        ],
+        "trans_layers": [
+            2,
+            4,
+            8
+        ],
+        "n_experts": [
+            4,
+            8,
+            16
+        ],
+        "dropout": [
+            0.1,
+            0.3
+        ]
+    },
+    "target_col": "target_5d",
+    "input_dim": 9,
+    "static_dim": 4
+}

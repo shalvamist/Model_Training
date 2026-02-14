@@ -1,0 +1,218 @@
+{
+    "experiment_name": "v20_deep_cycle_arbitrage_triple_barrier",
+    "processor": "v20",
+    "model_type": "experimental_v17",
+    "use_revin": true,
+    "bidirectional": true,
+    "use_kan": true,
+    "use_gpu": true,
+    "use_directional_head": true,
+    "train_years": 13,
+    "val_years": 2,
+    "test_years": 2,
+    "batch_size": 16,
+    "epochs": 150,
+    "early_stopping_patience": 15,
+    "hidden_size": 128,
+    "n_heads": 8,
+    "dropout": 0.2514760440988293,
+    "lr": 8.949345611960211e-05,
+    "lstm_layers": 7,
+    "trans_layers": 4,
+    "n_experts": 4,
+    "loss_type": "directional_focal",
+    "dfl_alpha": 0.3868174787360539,
+    "dfl_beta": 0.4626527328872616,
+    "dfl_gamma": 0.10366620204256966,
+    "focal_gamma": 2.9811945430069926,
+    "asymmetric_penalty": 3.213768616757339,
+    "cls_weight": 0.5,
+    "cls_threshold": 0.008650802039480475,
+    "bear_weight": 2.631774776482792,
+    "seq_length": 90,
+    "extra_tickers": [
+        "GLD",
+        "TLT",
+        "UUP",
+        "EEM"
+    ],
+    "feature_pipeline": [
+        {
+            "step": "log_return",
+            "input": "underlying_close",
+            "output": "log_ret",
+            "lags": [
+                3,
+                5,
+                10,
+                20,
+                60
+            ]
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "rsi",
+            "input": "underlying_close",
+            "period": 7,
+            "output": "rsi_7"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "rsi",
+            "input": "underlying_close",
+            "period": 14,
+            "output": "rsi_14"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "atr",
+            "period": 5,
+            "output": "atr_5"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "atr",
+            "period": 20,
+            "output": "atr_20"
+        },
+        {
+            "step": "arithmetic",
+            "formula": "atr_5 / (atr_20 + 1e-6)",
+            "output": "atr_ratio"
+        },
+        {
+            "step": "bollinger_position",
+            "input": "underlying_close",
+            "window": 20,
+            "output": "bb_pos"
+        },
+        {
+            "step": "volume_ratio",
+            "input": "volume",
+            "window": 20,
+            "output": "vol_ratio"
+        },
+        {
+            "step": "close_vs_ma",
+            "input": "underlying_close",
+            "window": 7,
+            "output": "close_vs_ma7"
+        },
+        {
+            "step": "roc",
+            "input": "underlying_close",
+            "period": 3,
+            "output": "roc_3"
+        },
+        {
+            "step": "roc",
+            "input": "underlying_close",
+            "period": 7,
+            "output": "roc_7"
+        },
+        {
+            "step": "lag_diff",
+            "input": "gld",
+            "lag": 10,
+            "pct_change": true,
+            "output": "gld_mom_10"
+        },
+        {
+            "step": "lag_diff",
+            "input": "tlt",
+            "lag": 10,
+            "pct_change": true,
+            "output": "tlt_mom_10"
+        },
+        {
+            "step": "lag_diff",
+            "input": "uup",
+            "lag": 10,
+            "pct_change": true,
+            "output": "uup_mom_10"
+        },
+        {
+            "step": "lag_diff",
+            "input": "eem",
+            "lag": 10,
+            "pct_change": true,
+            "output": "eem_mom_10"
+        },
+        {
+            "step": "rolling_stat",
+            "input": "log_ret",
+            "window": 20,
+            "stat": "skew",
+            "output": "ret_skew_20"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "us_treasury_10y",
+                "vix",
+                "rsi_7",
+                "rsi_14",
+                "atr_ratio",
+                "bb_pos",
+                "vol_ratio",
+                "close_vs_ma7",
+                "roc_3",
+                "roc_7",
+                "gld_mom_10",
+                "tlt_mom_10",
+                "uup_mom_10",
+                "eem_mom_10",
+                "ret_skew_20"
+            ],
+            "window": 60,
+            "suffix": "_norm"
+        }
+    ],
+    "dynamic_columns": [
+        "log_ret",
+        "log_ret_3",
+        "log_ret_5",
+        "log_ret_10",
+        "log_ret_20",
+        "log_ret_60",
+        "rsi_7_norm",
+        "rsi_14_norm",
+        "atr_ratio_norm",
+        "bb_pos_norm",
+        "vol_ratio_norm",
+        "close_vs_ma7_norm",
+        "roc_3_norm",
+        "roc_7_norm",
+        "gld_mom_10_norm",
+        "tlt_mom_10_norm",
+        "uup_mom_10_norm",
+        "eem_mom_10_norm",
+        "ret_skew_20_norm",
+        "us_treasury_10y_norm",
+        "vix_norm",
+        "rsi_abs",
+        "vix_abs"
+    ],
+    "static_columns": [
+        "strike_distance",
+        "dte_normalized",
+        "is_call",
+        "moneyness"
+    ],
+    "targets": [
+        {
+            "name": "target_1",
+            "input": "underlying_close",
+            "horizon": 7,
+            "type": "log_future_return"
+        },
+        {
+            "name": "target_2",
+            "input": "underlying_close",
+            "horizon": 21,
+            "type": "log_future_return"
+        }
+    ],
+    "input_dim": 23,
+    "static_dim": 4
+}

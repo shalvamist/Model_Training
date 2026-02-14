@@ -1,0 +1,113 @@
+{
+    "experment_name": "deep_cycle_arbitrage",
+    "processor": "generic",
+    "model_type": "hybrid_v12",
+    "use_gpu": true,
+    "train_years": 13,
+    "val_years": 2,
+    "test_years": 2,
+    "batch_size": 32,
+    "epochs": 50,
+    "early_stopping_patience": 10,
+    "hidden_size": 256,
+    "n_heads": 4,
+    "dropout": 0.2,
+    "lr": 0.0001,
+    "lstm_layers": 2,
+    "trans_layers": 4,
+    "n_experts": 8,
+    "loss_type": "mse",
+    "extra_tickers": [
+        "USO",
+        "^TNX"
+    ],
+    "feature_pipeline": [
+        {
+            "step": "log_return",
+            "input": "underlying_close",
+            "output": "log_ret",
+            "lags": [
+                20,
+                60
+            ]
+        },
+        {
+            "step": "fourier",
+            "window": 256,
+            "output": "cycle_phase_256"
+        },
+        {
+            "step": "wavelet",
+            "widths": [
+                60,
+                250
+            ],
+            "prefix": "wave"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "cycle_phase_256",
+                "us_treasury_10y",
+                "uso"
+            ],
+            "window": 256,
+            "suffix": "_norm"
+        }
+    ],
+    "dynamic_columns": [
+        "log_ret",
+        "cycle_phase_256_norm",
+        "wave_60",
+        "wave_250",
+        "us_treasury_10y_norm",
+        "uso_norm"
+    ],
+    "static_columns": [],
+    "targets": [
+        {
+            "name": "target_1",
+            "input": "underlying_close",
+            "horizon": 21,
+            "type": "log_future_return"
+        },
+        {
+            "name": "target_2",
+            "input": "underlying_close",
+            "horizon": 60,
+            "type": "log_future_return"
+        }
+    ],
+    "lookback_window": 60,
+    "optuna": {
+        "lr": [
+            1e-5,
+            5e-4
+        ],
+        "batch_size": [
+            32,
+            64
+        ],
+        "hidden_size": [
+            128,
+            256,
+            512
+        ],
+        "trans_layers": [
+            2,
+            4,
+            8
+        ],
+        "n_experts": [
+            4,
+            8,
+            16
+        ],
+        "dropout": [
+            0.1,
+            0.3
+        ]
+    },
+    "target_col": "target_60d",
+    "input_dim": 6
+}

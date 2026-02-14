@@ -99,6 +99,47 @@ class ResidualBlock(nn.Module):
     def forward(self, x):
         return self.norm(x + self.net(x))
 
+class GatedResidualNetwork(nn.Module):
+    """
+    Gated Residual Network (GRN) from Temporal Fusion Transformers.
+    Allows the model to learn to skip non-linear processing for simple features.
+    """
+    def __init__(self, input_size, hidden_size, output_size, dropout=0.1):
+        super().__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.elu = nn.ELU()
+        self.fc2 = nn.Linear(hidden_size, output_size)
+        self.dropout = nn.Dropout(dropout)
+        self.gate = nn.Linear(input_size, output_size) # Gate based on Input? Or processed?
+        # TFT paper: Gate is GLU(Linear(x)). Here we simplify to Sigmoid(Linear(x)) * x logic
+        # Wait, standard GRN: 
+        # a = ELU(Linear(x))
+        # b = Linear(a)
+        # g = Sigmoid(Linear(x)) (?) No, usually separate context.
+        # Let's stick to a solid implementation:
+        
+        self.norm = nn.LayerNorm(output_size)
+        
+        if input_size != output_size:
+            self.res_proj = nn.Linear(input_size, output_size)
+        else:
+            self.res_proj = None
+
+    def forward(self, x):
+        residual = self.res_proj(x) if self.res_proj else x
+        
+        # Non-linear path
+        h = self.fc1(x)
+        h = self.elu(h)
+        h = self.fc2(h)
+        h = self.dropout(h)
+        
+        # Gating
+        g = torch.sigmoid(self.gate(x)) 
+        
+        return self.norm(residual + g * h)
+
+
 class HybridJointNetwork(nn.Module):
     """
     Universal Architecture (formerly V11/V12/V13).
@@ -250,14 +291,12 @@ class ExperimentalNetwork(nn.Module):
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=config.get('trans_layers', 2))
         self.norm = nn.LayerNorm(self.hidden_size)
         
-        # 4. Static Encoder (SwiGLU Enhanced)
+        # 4. Static Encoder (GRN Enhanced)
         self.dow_embed = nn.Embedding(7, 4)
         self.moy_embed = nn.Embedding(12, 4)
         
-        self.static_net = nn.Sequential(
-            SwiGLU(static_dim, self.hidden_size, self.hidden_size),
-            nn.Dropout(dropout)
-        )
+        # static_dim includes embedding outputs (4+4=8 added to raw inputs)
+        self.static_net = GatedResidualNetwork(static_dim, self.hidden_size, self.hidden_size, dropout)
         
         # 5. Fusion
         self.cross_att = CrossAttention(self.hidden_size, num_heads=4, dropout=dropout)
@@ -281,6 +320,22 @@ class ExperimentalNetwork(nn.Module):
         
         self.head_2_reg = MixtureOfExperts(self.hidden_size, reg_output_dim, n_experts, self.hidden_size // 2, use_kan=use_kan_experts)
         self.head_2_cls = MixtureOfExperts(self.hidden_size, 3, n_experts, self.hidden_size // 2, use_kan=use_kan_experts)
+        
+        # V19: Directional Head (binary up/down prediction)
+        self.use_directional_head = config.get('use_directional_head', False)
+        if self.use_directional_head:
+            self.head_1_dir = nn.Sequential(
+                nn.Linear(self.hidden_size, self.hidden_size // 2),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(self.hidden_size // 2, 1)
+            )
+            self.head_2_dir = nn.Sequential(
+                nn.Linear(self.hidden_size, self.hidden_size // 2),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(self.hidden_size // 2, 1)
+            )
 
     def forward(self, x_dyn, x_stat, x_time):
         # 1. RevIN Normalization
@@ -309,18 +364,16 @@ class ExperimentalNetwork(nn.Module):
         
         # 5. Heads
         reg_1 = self.head_1_reg(context)
-        cls_1 = self.head_1_cls(context) # Note: MoE for Classificaton too in V17
+        cls_1 = self.head_1_cls(context)
         
         reg_2 = self.head_2_reg(context)
         cls_2 = self.head_2_cls(context)
         
-        # Note: RevIN Denormalization for Regression?
-        # Usually RevIN denorms the output.
-        # But our target is 'log_return', which is stationary-ish.
-        # RevIN is most useful for PRICE forecasting.
-        # However, if we enabled it, we should arguably denorm the regression output.
-        # But since our targets (Y_1, Y_2) are NOT price, but returns, RevIN is mostly acting as a robust scaler for INPUTS.
-        # We will NOT denrom output against the input statistics because output domain != input domain.
+        # V19: Directional heads (binary up/down logit)
+        if self.use_directional_head:
+            dir_1 = self.head_1_dir(context)
+            dir_2 = self.head_2_dir(context)
+            return reg_1, cls_1, reg_2, cls_2, dir_1, dir_2
         
         return reg_1, cls_1, reg_2, cls_2
 

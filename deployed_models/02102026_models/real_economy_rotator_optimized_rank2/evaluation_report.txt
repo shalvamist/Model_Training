@@ -1,0 +1,45 @@
+==================================================
+EVALUATION REPORT: config.json
+==================================================
+Model ID: real_economy_rotator
+Test Samples: 990
+
+--- Horizon 1 (Short) Horizon ---
+[Classification] Accuracy: 0.6
+[Classification] F1 (Macro): 0.3198
+[Classification] MCC: 0.0319
+[Regression]     MAE: 0.02733 | RMSE: 0.03430 | R2: -1.3570
+[Directional]    Reg Direction Acc: 57.88%
+[Trading Sim]    Total Return: 2.90% (Market: 77.28%)
+[Trading Sim]    Win Rate: 29.24% | Sharpe: 0.14
+
+--- Horizon 2 (Medium) Horizon ---
+[Classification] Accuracy: 0.2474747474747475
+[Classification] F1 (Macro): 0.2185
+[Classification] MCC: -0.0178
+[Regression]     MAE: 0.03296 | RMSE: 0.04491 | R2: -0.2087
+[Directional]    Reg Direction Acc: 67.27%
+[Trading Sim]    Total Return: 39.08% (Market: 77.28%)
+[Trading Sim]    Win Rate: 38.96% | Sharpe: 0.62
+
+=== Detailed Classification Report (H1) ===
+              precision    recall  f1-score   support
+
+        Bear       0.19      0.23      0.21       142
+     Neutral       0.69      0.83      0.75       674
+        Bull       0.00      0.00      0.00       174
+
+    accuracy                           0.60       990
+   macro avg       0.29      0.35      0.32       990
+weighted avg       0.49      0.60      0.54       990
+
+=== Detailed Classification Report (H2) ===
+              precision    recall  f1-score   support
+
+        Bear       0.13      0.16      0.14       110
+     Neutral       0.56      0.10      0.18       671
+        Bull       0.22      0.75      0.34       209
+
+    accuracy                           0.25       990
+   macro avg       0.30      0.34      0.22       990
+weighted avg       0.44      0.25      0.21       990

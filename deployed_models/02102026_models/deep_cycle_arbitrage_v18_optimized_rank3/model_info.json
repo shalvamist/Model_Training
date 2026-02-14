@@ -1,0 +1,49 @@
+{
+  "model_name": "deep_cycle_arbitrage_v18_optimized_rank3",
+  "architecture": "hybrid_v12",
+  "input_features": {
+    "dynamic_features": 6,
+    "static_features": 0,
+    "dynamic_feature_names": [
+      "log_ret",
+      "cycle_phase_256_norm",
+      "wave_60",
+      "wave_250",
+      "us_treasury_10y_norm",
+      "uso_norm"
+    ],
+    "static_feature_names": []
+  },
+  "outputs": {
+    "regression_heads": 2,
+    "classification_heads": 2,
+    "regression_targets": [
+      "target_1",
+      "target_2"
+    ],
+    "classification_classes": [
+      "Bear (0)",
+      "Neutral (1)",
+      "Bull (2)"
+    ],
+    "classification_thresholds": {
+      "bear": -0.02,
+      "neutral_min": -0.02,
+      "neutral_max": 0.02,
+      "bull": 0.02
+    }
+  },
+  "hyperparameters": {
+    "hidden_size": 256,
+    "lstm_layers": 2,
+    "trans_layers": 6,
+    "dropout": 0.3355465901082022,
+    "learning_rate": 0.0005707928891829468,
+    "batch_size": 16
+  },
+  "training_info": {
+    "epochs": 150,
+    "loss_type": "huber",
+    "cls_weight": 0.8
+  }
+}

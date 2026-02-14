@@ -1,0 +1,132 @@
+{
+    "experment_name": "industrial_sniper",
+    "processor": "generic",
+    "model_type": "experimental_v17",
+    "use_revin": true,
+    "bidirectional": true,
+    "use_kan": true,
+    "use_gpu": true,
+    "train_years": 13,
+    "val_years": 2,
+    "test_years": 2,
+    "batch_size": 64,
+    "epochs": 50,
+    "early_stopping_patience": 10,
+    "hidden_size": 256,
+    "n_heads": 4,
+    "dropout": 0.2,
+    "lr": 0.0001,
+    "lstm_layers": 4,
+    "trans_layers": 2,
+    "n_experts": 8,
+    "loss_type": "focal",
+    "extra_tickers": [
+        "XLI"
+    ],
+    "feature_pipeline": [
+        {
+            "step": "log_return",
+            "input": "underlying_close",
+            "output": "log_ret",
+            "lags": [
+                3,
+                5
+            ]
+        },
+        {
+            "step": "gap",
+            "open_col": "underlying_open",
+            "close_col": "underlying_close",
+            "output": "gap_raw"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "rsi",
+            "period": 3,
+            "output": "rsi_3"
+        },
+        {
+            "step": "rolling_stat",
+            "input": "volume",
+            "window": 20,
+            "stat": "mean",
+            "output": "volume_ma_20"
+        },
+        {
+            "step": "arithmetic",
+            "formula": "volume / (volume_ma_20 + 1e-6)",
+            "output": "vol_spike"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "rsi_3",
+                "gap_raw",
+                "vol_spike",
+                "vix"
+            ],
+            "window": 60,
+            "suffix": "_norm"
+        }
+    ],
+    "dynamic_columns": [
+        "log_ret",
+        "log_ret_3",
+        "log_ret_5",
+        "gap_raw_norm",
+        "rsi_3_norm",
+        "vol_spike_norm",
+        "vix_norm"
+    ],
+    "static_columns": [],
+    "targets": [
+        {
+            "name": "target_1",
+            "input": "underlying_close",
+            "horizon": 5,
+            "type": "log_future_return"
+        },
+        {
+            "name": "target_2",
+            "input": "underlying_close",
+            "horizon": 21,
+            "type": "log_future_return"
+        }
+    ],
+    "lookback_window": 60,
+    "optuna": {
+        "lr": [
+            1e-4,
+            1e-3
+        ],
+        "batch_size": [
+            32,
+            64,
+            128
+        ],
+        "hidden_size": [
+            128,
+            256
+        ],
+        "lstm_layers": [
+            2,
+            4,
+            6
+        ],
+        "trans_layers": [
+            2,
+            4
+        ],
+        "n_experts": [
+            4,
+            8,
+            16
+        ],
+        "dropout": [
+            0.1,
+            0.3
+        ]
+    },
+    "target_col": "target_5d",
+    "input_dim": 7
+}

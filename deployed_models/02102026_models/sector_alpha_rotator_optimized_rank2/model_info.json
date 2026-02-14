@@ -1,0 +1,57 @@
+{
+  "model_name": "sector_alpha_rotator_optimized_rank2",
+  "architecture": "experimental_v17",
+  "input_features": {
+    "dynamic_features": 9,
+    "static_features": 4,
+    "dynamic_feature_names": [
+      "log_ret",
+      "log_ret_5",
+      "log_ret_20",
+      "ratio_risk_norm",
+      "ratio_growth_norm",
+      "rsi_risk_norm",
+      "macd_growth_norm",
+      "us_treasury_10y_norm",
+      "vix_norm"
+    ],
+    "static_feature_names": [
+      "strike_distance",
+      "dte_normalized",
+      "is_call",
+      "moneyness"
+    ]
+  },
+  "outputs": {
+    "regression_heads": 2,
+    "classification_heads": 2,
+    "regression_targets": [
+      "target_1",
+      "target_2"
+    ],
+    "classification_classes": [
+      "Bear (0)",
+      "Neutral (1)",
+      "Bull (2)"
+    ],
+    "classification_thresholds": {
+      "bear": -0.02,
+      "neutral_min": -0.02,
+      "neutral_max": 0.02,
+      "bull": 0.02
+    }
+  },
+  "hyperparameters": {
+    "hidden_size": 512,
+    "lstm_layers": 8,
+    "trans_layers": 2,
+    "dropout": 0.14013812352061944,
+    "learning_rate": 6.248337643724917e-05,
+    "batch_size": 128
+  },
+  "training_info": {
+    "epochs": 50,
+    "loss_type": "focal",
+    "cls_weight": 0.8
+  }
+}

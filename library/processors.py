@@ -55,7 +55,10 @@ class BaseProcessor:
         total_years = tr_y + te_y
         
         end = pd.Timestamp.now()
-        start = end - pd.DateOffset(years=total_years)
+        end = pd.Timestamp.now()
+        # Support float years by converting to days
+        total_days = int(total_years * 365)
+        start = end - pd.DateOffset(days=total_days)
         
         tickers = [ticker] + DATA_CONFIG["macro_tickers"]
         # Allow child classes to append tickers
@@ -329,6 +332,10 @@ class ProcessorV13(BaseProcessor):
         df['target_1'] = np.log(df['underlying_close'].shift(-5) / df['underlying_close']).fillna(0)
         df['target_2'] = np.log(df['underlying_close'].shift(-21) / df['underlying_close']).fillna(0)
 
+        # Time Features (Required for sequence generation)
+        if 'dow' not in df.columns: df['dow'] = df.index.dayofweek
+        if 'moy' not in df.columns: df['moy'] = df.index.month - 1
+
         # Verify
         return self._verify_data(df), dyn_cols, stat_cols
 
@@ -367,6 +374,10 @@ class ProcessorV15(ProcessorV13):
         df_proc[new_cols] = df_proc[new_cols].fillna(0)
         
         return self._verify_data(df_proc), dyn_cols, stat_cols
+        
+
+
+
         
 class GenericProcessor(BaseProcessor):
     """
@@ -439,3 +450,76 @@ class GenericProcessor(BaseProcessor):
         if 'moy' not in df.columns: df['moy'] = df.index.month - 1
         
         return self._verify_data(df), dyn_cols, stat_cols
+
+
+class ProcessorV20(GenericProcessor):
+    """
+    Project 70 Processor (V20).
+    - Triple Barrier Targets (Target 1=7d, Target 2=21d)
+    - Mixed Normalization (Robust for Ret/Diff, Absolute for Levels)
+    - Inherits GenericProcessor to support config-driven pipelines (e.g. Sectors)
+    """
+    def process(self, df):
+        # 1. Run Generic Pipeline
+        df_proc, dyn_cols, stat_cols = super().process(df)
+        if df_proc is None: return None, [], []
+        
+        p = self.params
+        fe = self.fe
+        
+        # 2. Add Absolute Normalized Features (Preserve Regime Context)
+        # RSI: Center 50, Scale 25
+        raw_rsi = fe.calculate_rsi(df_proc['underlying_close'], p['rsi_period'])
+        df_proc['rsi_abs'] = (raw_rsi - 50.0) / 25.0
+        
+        # VIX: Baseline 20, Scale 10
+        if 'vix' in df_proc.columns:
+            df_proc['vix_abs'] = (df_proc['vix'] - 20.0) / 10.0
+            
+        # IV: Baseline 0.20, Scale 0.10
+        if 'iv' in df_proc.columns:
+            df_proc['iv_abs'] = (df_proc['iv'] - 0.20) / 0.10
+            
+        # Add to dynamic columns
+        for c in ['rsi_abs', 'vix_abs', 'iv_abs']:
+            if c in df_proc.columns and c not in dyn_cols:
+                dyn_cols.append(c)
+                
+        # 3. Generate Triple Barrier Targets
+        # Use ATR-based daily volatility estimate
+        if 'atr' in df_proc.columns and 'underlying_close' in df_proc.columns:
+            daily_vol = (df_proc['atr'] / df_proc['underlying_close']).fillna(0.01)
+        else:
+            daily_vol = None # Will default to fixed 2% in FE
+            
+        # H1: 5 Days (Week)
+        df_proc['target_1_cls'] = fe.calculate_triple_barrier_labels(
+            df_proc['underlying_close'], daily_vol, vertical_barrier=5, sl_tp_multiplier=2.0
+        )
+        
+        # H2: 21 Days (Month)
+        df_proc['target_2_cls'] = fe.calculate_triple_barrier_labels(
+            df_proc['underlying_close'], daily_vol, vertical_barrier=21, sl_tp_multiplier=2.0
+        )
+        
+        return self._verify_data(df_proc), dyn_cols, stat_cols
+
+    def create_sequences(self, df, dyn_cols, stat_cols):
+        # Get base 6-tuple
+        base_seqs = super().create_sequences(df, dyn_cols, stat_cols)
+        
+        seq_len = self.config.get('seq_length', 60)
+        
+        # Extract Class Targets
+        if 'target_1_cls' in df.columns:
+            y1_cls = df['target_1_cls'].values.astype(np.int64)[seq_len:]
+        else:
+            y1_cls = np.zeros(len(base_seqs[0]), dtype=np.int64)
+            
+        if 'target_2_cls' in df.columns:
+            y2_cls = df['target_2_cls'].values.astype(np.int64)[seq_len:]
+        else:
+            y2_cls = np.zeros(len(base_seqs[0]), dtype=np.int64)
+            
+        # Return 8-tuple
+        return (*base_seqs, y1_cls, y2_cls)
