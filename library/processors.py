@@ -480,8 +480,38 @@ class ProcessorV20(GenericProcessor):
         if 'iv' in df_proc.columns:
             df_proc['iv_abs'] = (df_proc['iv'] - 0.20) / 0.10
             
+        if 'iv' in df_proc.columns:
+            df_proc['iv_abs'] = (df_proc['iv'] - 0.20) / 0.10
+            
+        # 2b. Add VIX Dynamics (Restored from V13)
+        if 'vix' in df_proc.columns:
+            df_proc['vix_slope_5'] = (df_proc['vix'] - df_proc['vix'].shift(5)) / (df_proc['vix'].shift(5) + 1e-6)
+            df_proc['vix_accel_5'] = (df_proc['vix_slope_5'] - df_proc['vix_slope_5'].shift(5))
+        else:
+             df_proc['vix_slope_5'] = 0.0
+             df_proc['vix_accel_5'] = 0.0
+
+        # 2c. Add Crash Greeks (Hypothetical Shock)
+        # Calculate Delta/Gamma assuming 2x Vol and -20% Price Drop
+        # This gives the model a "Shadow" view of structural risk
+        if 'underlying_close' in df_proc.columns and 'us_treasury_10y' in df_proc.columns:
+            S_crash = df_proc['underlying_close'] * 0.80
+            iv_crash = df_proc['iv'] * 2.0 if 'iv' in df_proc.columns else 0.40
+            
+            crash_greeks = df_proc.apply(lambda row: fe.black_scholes_greeks(
+                S_crash[row.name], S_crash[row.name], 65.0/365.0, 
+                row['us_treasury_10y']/100.0, iv_crash[row.name] if isinstance(iv_crash, pd.Series) else iv_crash, 'call'
+            ), axis=1, result_type='expand')
+            
+            # extract delta (0) and gamma (1)
+            df_proc['crash_delta'] = crash_greeks[0]
+            df_proc['crash_gamma'] = crash_greeks[1]
+        else:
+            df_proc['crash_delta'] = 0.5
+            df_proc['crash_gamma'] = 0.01
+
         # Add to dynamic columns
-        for c in ['rsi_abs', 'vix_abs', 'iv_abs']:
+        for c in ['rsi_abs', 'vix_abs', 'iv_abs', 'vix_slope_5', 'vix_accel_5', 'crash_delta', 'crash_gamma']:
             if c in df_proc.columns and c not in dyn_cols:
                 dyn_cols.append(c)
                 
@@ -493,13 +523,17 @@ class ProcessorV20(GenericProcessor):
             daily_vol = None # Will default to fixed 2% in FE
             
         # H1: 5 Days (Week)
+        # Asymmetric: Lower Barrier (Bear) 1.5x, Upper Barrier (Bull) 2.0x
+        # Makes it easier to label a drop as "Bear" than a rise as "Bull"
         df_proc['target_1_cls'] = fe.calculate_triple_barrier_labels(
-            df_proc['underlying_close'], daily_vol, vertical_barrier=5, sl_tp_multiplier=2.0
+            df_proc['underlying_close'], daily_vol, vertical_barrier=5, 
+            lower_barrier_multiplier=1.5, upper_barrier_multiplier=2.0
         )
         
         # H2: 21 Days (Month)
         df_proc['target_2_cls'] = fe.calculate_triple_barrier_labels(
-            df_proc['underlying_close'], daily_vol, vertical_barrier=21, sl_tp_multiplier=2.0
+            df_proc['underlying_close'], daily_vol, vertical_barrier=21, 
+            lower_barrier_multiplier=1.5, upper_barrier_multiplier=2.0
         )
         
         return self._verify_data(df_proc), dyn_cols, stat_cols

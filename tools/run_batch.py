@@ -71,7 +71,7 @@ def main():
             # Run train.py as a subprocess
             cmd = [sys.executable, train_script, "--config", config_file]
             
-            # Append overrides
+            # Use CLI args only if explicitly provided by user
             if args.epochs: cmd.extend(["--epochs", str(args.epochs)])
             if args.batch_size: cmd.extend(["--batch_size", str(args.batch_size)])
             if args.lr: cmd.extend(["--lr", str(args.lr)])
@@ -114,7 +114,8 @@ def main():
             print("="*60)
             
             start_time = time.time()
-            cmd = [sys.executable, train_script, "--config", opt_config, "--epochs", str(args.final_epochs)]
+            cmd = [sys.executable, train_script, "--config", opt_config]
+            if args.final_epochs: cmd.extend(["--epochs", str(args.final_epochs)])
             if args.force_cpu: cmd.append("--force_cpu")
             
             try:

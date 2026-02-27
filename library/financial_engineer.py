@@ -230,7 +230,7 @@ class FinancialEngineer:
         return remapped_labels
 
     @staticmethod
-    def calculate_triple_barrier_labels(prices, volatility, vertical_barrier=21, sl_tp_multiplier=2.0):
+    def calculate_triple_barrier_labels(prices, volatility, vertical_barrier=21, sl_tp_multiplier=2.0, lower_barrier_multiplier=2.0, upper_barrier_multiplier=2.0):
         """
         Triple Barrier Method (Vectorized-ish).
         
@@ -239,7 +239,9 @@ class FinancialEngineer:
             volatility: pd.Series of daily volatility (e.g. Daily Return StdDev or ATR).
                         If None, uses fixed 2% barrier.
             vertical_barrier: int, max holding days.
-            sl_tp_multiplier: float, barrier width in units of volatility.
+            sl_tp_multiplier: float, base barrier width (deprecated if multipliers provided).
+            lower_barrier_multiplier: float, multiplier for Bear barrier (default=2.0).
+            upper_barrier_multiplier: float, multiplier for Bull barrier (default=2.0).
         
         Returns:
             pd.Series of labels:
@@ -253,14 +255,26 @@ class FinancialEngineer:
         p_arr = prices.values
         idx = prices.index
         
+        # Barrier Multipliers
+        # If sl_tp_multiplier passed but default multipliers used, use sl_tp for both (backward compat)
+        if sl_tp_multiplier != 2.0 and lower_barrier_multiplier == 2.0 and upper_barrier_multiplier == 2.0:
+            lower_mult = sl_tp_multiplier
+            upper_mult = sl_tp_multiplier
+        else:
+            lower_mult = lower_barrier_multiplier
+            upper_mult = upper_barrier_multiplier
+
         # Volatility Barrier Height
         if volatility is not None:
             # Dynamic barrier: e.g. 2 * Daily_Vol
             # Note: Volatility should be in % terms (0.01 = 1%)
-            barriers = volatility.values * sl_tp_multiplier
+            v_vals = volatility.values
+            barriers_upper = v_vals * upper_mult
+            barriers_lower = v_vals * lower_mult
         else:
-            # Fixed 2% barrier
-            barriers = np.full(len(prices), 0.02)
+            # Fixed 2% barrier basic
+            barriers_upper = np.full(len(prices), 0.02)
+            barriers_lower = np.full(len(prices), 0.02)
             
         # Iterate (Vectorization hard for path dependency)
         # We can limit the loop to just jumping 'vertical_barrier'
@@ -271,10 +285,13 @@ class FinancialEngineer:
         
         for t in range(limit):
             current_price = p_arr[t]
-            barrier = barriers[t]
             
-            upper = current_price * (1 + barrier)
-            lower = current_price * (1 - barrier)
+            # Asymmetric Barriers
+            b_up = barriers_upper[t]
+            b_down = barriers_lower[t]
+            
+            upper = current_price * (1 + b_up)
+            lower = current_price * (1 - b_down)
             
             # Slice the future window
             window = p_arr[t+1 : t+vertical_barrier+1]

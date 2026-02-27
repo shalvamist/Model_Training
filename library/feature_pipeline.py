@@ -267,6 +267,21 @@ def step_bollinger(df, config):
     df[out] = ((df[col] - lower) / (band_width + 1e-8)).clip(0, 1).fillna(0.5)
     return df
 
+@FeatureRegistry.register('rolling_correlation')
+def step_rolling_correlation(df, config):
+    """Calculates rolling correlation between two columns."""
+    col1 = config['input1']
+    col2 = config['input2']
+    window = config.get('window', 20)
+    out = config.get('output', f'corr_{col1}_{col2}_{window}')
+    
+    series1 = df[col1].fillna(0)
+    series2 = df[col2].fillna(0)
+    
+    # Calculate rolling correlation
+    df[out] = series1.rolling(window=window).corr(series2).fillna(0)
+    return df
+
 @FeatureRegistry.register('volume_ratio')
 def step_volume_ratio(df, config):
     """Current volume relative to its moving average — detects volume surges."""

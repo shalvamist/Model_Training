@@ -102,6 +102,15 @@ def objective(trial, config, device, X_dyn, X_stat, X_time, Y_1, Y_2,
                 trial_config["trans_layers"] = trial.suggest_int("trans_layers", trans_vals[0], trans_vals[1])
             else:
                 trial_config["trans_layers"] = trial.suggest_categorical("trans_layers", trans_vals)
+                
+        if "n_heads" in opt_config:
+            head_vals = opt_config["n_heads"]
+            if len(head_vals) == 2:
+                # E.g. [4, 8] - we can just pick categorical if we define an array of choices in the json
+                # But typically heads jump in powers of 2. We will treat it as categorical if it has >2 elements,
+                # or just categorical anyway.
+                pass # handled below securely 
+            trial_config["n_heads"] = trial.suggest_categorical("n_heads", head_vals)
             
         if "n_experts" in opt_config:
             expert_vals = opt_config["n_experts"]
@@ -115,6 +124,20 @@ def objective(trial, config, device, X_dyn, X_stat, X_time, Y_1, Y_2,
             
         if "stride" in opt_config:
             trial_config["stride"] = trial.suggest_categorical("stride", opt_config["stride"])
+
+        # --- V23 Specific Hyperparameters ---
+        if "tail_penalty_factor" in opt_config:
+            tp_min, tp_max = opt_config["tail_penalty_factor"]
+            trial_config["tail_penalty_factor"] = trial.suggest_float("tail_penalty_factor", tp_min, tp_max)
+        else:
+            # Default V23 search space if not explicitly provided
+            trial_config["tail_penalty_factor"] = trial.suggest_float("tail_penalty_factor", 2.0, 20.0)
+            
+        if "tail_threshold" in opt_config:
+            tt_min, tt_max = opt_config["tail_threshold"]
+            trial_config["tail_threshold"] = trial.suggest_float("tail_threshold", tt_min, tt_max)
+        else:
+            trial_config["tail_threshold"] = trial.suggest_float("tail_threshold", -0.05, -0.01)
 
         if "layers" in opt_config:
             l_min, l_max = opt_config["layers"]
@@ -220,7 +243,7 @@ def main():
     parser = argparse.ArgumentParser(description="Optimize a Trading Model with Optuna")
     parser.add_argument("--config", type=str, required=True, help="Path to JSON config file")
     parser.add_argument("--trials", type=int, default=20, help="Number of trials")
-    parser.add_argument("--epochs", type=int, default=10, help="Epochs per trial")
+    parser.add_argument("--epochs", type=int, default=None, help="Epochs per trial (defaults to config)")
     parser.add_argument("--top_k", type=int, default=3, help="Save top K best configurations")
     parser.add_argument("--study_name", type=str, default=None, help="Optuna study name")
     parser.add_argument("--force_cpu", action="store_true", help="Force CPU usage")
@@ -290,7 +313,7 @@ def main():
     study.optimize(
         lambda trial: objective(
             trial, config, device, X_dyn, X_stat, X_time, Y_1, Y_2, 
-            train_end, val_end, Y_1_cls_pre, Y_2_cls_pre, epochs=args.epochs
+            train_end, val_end, Y_1_cls_pre, Y_2_cls_pre, epochs=args.epochs or config.get("epochs", 10)
         ), 
         n_trials=n_trials
     )

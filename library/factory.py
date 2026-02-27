@@ -3,7 +3,7 @@ import json
 import os
 import torch
 from .processors import ProcessorV11, ProcessorV13, ProcessorV15, ProcessorV20, GenericProcessor
-from .network_architectures import HybridJointNetwork, ExperimentalNetwork, PatchTST
+from .network_architectures import HybridJointNetwork, ExperimentalNetwork, PatchTST, V23MultiResNetwork
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,10 @@ class ModelFactory:
         if config.get('model_type') == 'patchtst':
             logger.info("Instantiating PatchTST Network")
             return PatchTST(config)
+            
+        if config.get('model_type') == 'v23_multires':
+            logger.info("Instantiating V23 Multi-Resolution Network")
+            return V23MultiResNetwork(config)
             
         return HybridJointNetwork(config)
         

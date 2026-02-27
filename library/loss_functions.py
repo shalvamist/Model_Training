@@ -174,3 +174,36 @@ class DirectionalFocalLoss(nn.Module):
         
         return self.alpha * loss_cls + self.beta * loss_reg + self.gamma * loss_dir
 
+class SharpeAwareLoss(nn.Module):
+    """
+    V23 Advanced Loss.
+    Optimizes for risk-adjusted returns by heavily penalizing "Tail Risk".
+    If the model predicts a strong positive return (Long), but the actual
+    target is massively negative (Crash), apply an exponential penalty.
+    """
+    def __init__(self, base_loss=nn.MSELoss(), tail_penalty_factor=5.0, tail_threshold=-0.03):
+        super().__init__()
+        self.base_loss = base_loss
+        self.tail_penalty_factor = tail_penalty_factor
+        self.tail_threshold = tail_threshold # e.g. -3% drop
+        
+    def forward(self, pred, target):
+        # Base MSE loss
+        if target.dim() == 1:
+             target = target.view(-1, 1)
+        base = self.base_loss(pred, target)
+        
+        # Tail Risk Condition: Model says Buy (pred > 0), but market Crashed (target < threshold)
+        tail_risk_mask = (pred > 0) & (target < self.tail_threshold)
+        
+        # Penalty magnitude: The gap between prediction and the crash
+        # We square it to match MSE scale, then multiply by factor
+        penalty = torch.where(
+            tail_risk_mask, 
+            ((pred - target) ** 2) * self.tail_penalty_factor, 
+            torch.zeros_like(pred)
+        )
+        
+        # Return base loss + mean tail penalty
+        return base + torch.mean(penalty)
+

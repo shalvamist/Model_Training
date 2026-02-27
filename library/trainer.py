@@ -8,7 +8,7 @@ import os
 import json
 import time
 
-from .loss_functions import FocalLoss, QuantileLoss, HuberLoss, DirectionalLoss, AsymmetricDirectionalLoss, DirectionalFocalLoss
+from .loss_functions import FocalLoss, QuantileLoss, HuberLoss, DirectionalLoss, AsymmetricDirectionalLoss, DirectionalFocalLoss, SharpeAwareLoss
 from .utils import MetricsCalculator
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,11 @@ class ModelTrainer:
                 penalty = config.get('asymmetric_penalty', 2.0)
                 self.reg_loss_fn = AsymmetricDirectionalLoss(penalty_factor=penalty)
                 logger.info(f"Using Asymmetric Directional Loss (penalty={penalty})")
+            elif config.get('loss_type') == 'sharpe_aware':
+                penalty = config.get('tail_penalty_factor', 5.0)
+                thresh = config.get('tail_threshold', -0.05)
+                self.reg_loss_fn = SharpeAwareLoss(tail_penalty_factor=penalty, tail_threshold=thresh)
+                logger.info(f"Using Sharpe Aware Loss (penalty={penalty}, thresh={thresh})")
             else:
                 self.reg_loss_fn = nn.MSELoss()
         

@@ -426,15 +426,133 @@ class PatchTST(nn.Module):
         # Simple heads
         self.head_1_reg = nn.Linear(self.hidden_size, 1)
         self.head_1_cls = nn.Linear(self.hidden_size, 3)
-        self.head_2_reg = nn.Linear(self.hidden_size, 1)
-        self.head_2_cls = nn.Linear(self.hidden_size, 3)
+        return self.head_1_reg(x), self.head_1_cls(x), self.head_2_reg(x), self.head_2_cls(x)
+
+class V23MultiResNetwork(nn.Module):
+    """
+    V23 Multi-Resolution Architecture.
+    Features:
+    - 1D Convolutions for Macro Trend Smoothing (Long term)
+    - KANLinear layers injected into the recurrent blocks (Micro patterns)
+    - Task-Specific Routing (Crash vs Drift Experts)
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_size = config['hidden_size']
+        dropout = config.get('dropout', 0.2)
+        
+        # 1. Dimensions
+        dyn_dim = config.get('input_dim') or len(config.get('feature_cols', []))
+        static_dim = config.get('static_dim', len(config.get('static_cols', []))) + 8 # +8 for time embeds
+        
+        # 2. RevIN Normalization
+        self.use_revin = config.get('use_revin', True)
+        if self.use_revin:
+            self.revin = RevIN(dyn_dim)
+            
+        # 3. Multi-Resolution Dynamic Encoder
+        # Slow Path: 1D Conv over sequences to smooth out noise
+        self.macro_conv = nn.Conv1d(in_channels=dyn_dim, out_channels=self.hidden_size, kernel_size=5, padding=2)
+        
+        # Fast Path: KAN layer right at the input to learn complex activations before LSTM
+        self.micro_kan = KANLinear(dyn_dim, self.hidden_size)
+        
+        # Bi-LSTM absorbs both
+        self.lstm = nn.LSTM(
+            self.hidden_size * 2, # Concat of macro(Conv) + micro(KAN)
+            self.hidden_size, 
+            num_layers=config.get('lstm_layers', 2), 
+            batch_first=True,
+            bidirectional=True
+        )
+        self.lstm_proj = nn.Linear(self.hidden_size * 2, self.hidden_size)
+        
+        self.n_heads = config.get('n_heads', 4)
+        self.trans_layers = config.get('trans_layers', 0)
+        
+        if self.trans_layers > 0:
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=self.hidden_size, 
+                nhead=self.n_heads, 
+                dim_feedforward=self.hidden_size * 4, 
+                dropout=dropout,
+                batch_first=True, 
+                norm_first=True, 
+                activation="gelu"
+            )
+            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=self.trans_layers)
+        
+        # 4. Static / Time Encoding
+        self.dow_embed = nn.Embedding(7, 4)
+        self.moy_embed = nn.Embedding(12, 4)
+        self.static_net = GatedResidualNetwork(static_dim, self.hidden_size, self.hidden_size, dropout)
+        
+        # 5. Fusion Attention
+        self.cross_att = CrossAttention(self.hidden_size, num_heads=self.n_heads, dropout=dropout)
+        self.pool_query = nn.Linear(self.hidden_size, 1)
+        
+        # 6. Task Specific Routing
+        # Instead of blind MoE, we have specific distinct heads
+        self.vix_router = nn.Sequential(
+            nn.Linear(self.hidden_size, 32),
+            nn.Sigmoid(),
+            nn.Linear(32, 1),
+            nn.Sigmoid() # Outputs a blend weight between 0 (Drift) and 1 (Crash)
+        )
+        
+        # Drift Experts (Low Volatility)
+        self.drift_reg_1 = KANLinear(self.hidden_size, 1)
+        self.drift_cls_1 = nn.Sequential(KANLinear(self.hidden_size, self.hidden_size//2), nn.Linear(self.hidden_size//2, 3))
+        self.drift_reg_2 = KANLinear(self.hidden_size, 1)
+        self.drift_cls_2 = nn.Sequential(KANLinear(self.hidden_size, self.hidden_size//2), nn.Linear(self.hidden_size//2, 3))
+        
+        # Crash Experts (High Volatility Tail Risk)
+        self.crash_reg_1 = nn.Sequential(nn.Linear(self.hidden_size, self.hidden_size//2), nn.GELU(), nn.Linear(self.hidden_size//2, 1))
+        self.crash_cls_1 = nn.Sequential(nn.Linear(self.hidden_size, self.hidden_size//2), nn.GELU(), nn.Linear(self.hidden_size//2, 3))
+        self.crash_reg_2 = nn.Sequential(nn.Linear(self.hidden_size, self.hidden_size//2), nn.GELU(), nn.Linear(self.hidden_size//2, 1))
+        self.crash_cls_2 = nn.Sequential(nn.Linear(self.hidden_size, self.hidden_size//2), nn.GELU(), nn.Linear(self.hidden_size//2, 3))
 
     def forward(self, x_dyn, x_stat, x_time):
-        x = self.patch_embed(x_dyn)
-        x = self.pos_encoder(x)
-        x = self.transformer(x)
-        # Pool: (B, N, H) -> (B, H)
-        x = x.transpose(1, 2)
-        x = self.pool(x).squeeze(2)
+        if self.use_revin:
+            x_dyn = self.revin(x_dyn, 'norm')
+            
+        # 1. Multi-Resolution Split
+        # Macro (Conv1d expects B, C, L)
+        macro_x = self.macro_conv(x_dyn.transpose(1, 2)).transpose(1, 2)
         
-        return self.head_1_reg(x), self.head_1_cls(x), self.head_2_reg(x), self.head_2_cls(x)
+        # Micro (KAN expects flattened features)
+        B, L, D = x_dyn.shape
+        micro_x = self.micro_kan(x_dyn.reshape(-1, D)).reshape(B, L, self.hidden_size)
+        
+        # Combine
+        combined_x = torch.cat([macro_x, micro_x], dim=-1)
+        
+        # 2. Sequential Processing
+        lstm_out, _ = self.lstm(combined_x)
+        seq_rep = self.lstm_proj(lstm_out)
+        
+        if self.trans_layers > 0:
+            seq_rep = self.transformer(seq_rep)
+        
+        # 3. Static Context
+        dow = self.dow_embed(x_time[:, 0].long())
+        moy = self.moy_embed(x_time[:, 1].long())
+        static_combined = torch.cat([x_stat, dow, moy], dim=1)
+        static_emb = self.static_net(static_combined)
+        
+        # 4. Attention Fusion
+        fused_seq = self.cross_att(seq_rep, static_emb)
+        weights = F.softmax(self.pool_query(fused_seq), dim=1)
+        context = torch.sum(fused_seq * weights, dim=1)
+        
+        # 5. Task Specific Routing
+        crash_weight = self.vix_router(context)
+        drift_weight = 1.0 - crash_weight
+        
+        # Blend Experts
+        reg_1 = (self.crash_reg_1(context) * crash_weight) + (self.drift_reg_1(context) * drift_weight)
+        cls_1 = (self.crash_cls_1(context) * crash_weight) + (self.drift_cls_1(context) * drift_weight)
+        reg_2 = (self.crash_reg_2(context) * crash_weight) + (self.drift_reg_2(context) * drift_weight)
+        cls_2 = (self.crash_cls_2(context) * crash_weight) + (self.drift_cls_2(context) * drift_weight)
+        
+        return reg_1, cls_1, reg_2, cls_2

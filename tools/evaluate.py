@@ -201,10 +201,12 @@ def main():
     report.append("")
     
     report.append("=== Detailed Classification Report (H1) ===")
-    report.append(classification_report(t1_cls, p1_cls, target_names=['Bear', 'Neutral', 'Bull']))
+    cls_report_h1_dict = classification_report(t1_cls, p1_cls, target_names=['Bear', 'Neutral', 'Bull'], output_dict=True, zero_division=0)
+    report.append(classification_report(t1_cls, p1_cls, target_names=['Bear', 'Neutral', 'Bull'], zero_division=0))
     
     report.append("=== Detailed Classification Report (H2) ===")
-    report.append(classification_report(t2_cls, p2_cls, target_names=['Bear', 'Neutral', 'Bull']))
+    cls_report_h2_dict = classification_report(t2_cls, p2_cls, target_names=['Bear', 'Neutral', 'Bull'], output_dict=True, zero_division=0)
+    report.append(classification_report(t2_cls, p2_cls, target_names=['Bear', 'Neutral', 'Bull'], zero_division=0))
     
     report_text = "\n".join(report)
     
@@ -223,9 +225,16 @@ def main():
             **metrics_h1_reg, 
             "directional_acc": metrics_h1_dir, 
             "dir_head_acc": dir_head_acc,
-            "trading_sim": sim_h1
+            "trading_sim": sim_h1,
+            "detailed_cls_report": cls_report_h1_dict
         },
-        "h2": {**metrics_h2_cls, **metrics_h2_reg, "directional_acc": metrics_h2_dir, "trading_sim": sim_h2}
+        "h2": {
+            **metrics_h2_cls, 
+            **metrics_h2_reg, 
+            "directional_acc": metrics_h2_dir, 
+            "trading_sim": sim_h2,
+            "detailed_cls_report": cls_report_h2_dict
+        }
     }
     # Convert numpy types to native
     def convert(o):
