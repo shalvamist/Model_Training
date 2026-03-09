@@ -1,0 +1,45 @@
+==================================================
+EVALUATION REPORT: config.json
+==================================================
+Model ID: v23_fortress_master
+Test Samples: 989
+
+--- Horizon 1 (Short) Horizon ---
+[Classification] Accuracy: 0.5581395348837209
+[Classification] F1 (Macro): 0.4153
+[Classification] MCC: 0.1499
+[Regression]     MAE: 0.02774 | RMSE: 0.03506 | R2: -0.8527
+[Directional]    Reg Direction Acc: 55.71%
+[Trading Sim]    Total Return: 29.50% (Market: 57.77%)
+[Trading Sim]    Win Rate: 30.13% | Sharpe: 0.80
+
+--- Horizon 2 (Medium) Horizon ---
+[Classification] Accuracy: 0.5207280080889788
+[Classification] F1 (Macro): 0.3661
+[Classification] MCC: 0.1134
+[Regression]     MAE: 0.03990 | RMSE: 0.05175 | R2: -0.5944
+[Directional]    Reg Direction Acc: 56.72%
+[Trading Sim]    Total Return: 58.69% (Market: 57.77%)
+[Trading Sim]    Win Rate: 36.63% | Sharpe: 0.81
+
+=== Detailed Classification Report (H1) ===
+              precision    recall  f1-score   support
+
+        Bear       0.21      0.12      0.16       187
+     Neutral       0.67      0.74      0.70       607
+        Bull       0.38      0.39      0.39       195
+
+    accuracy                           0.56       989
+   macro avg       0.42      0.42      0.42       989
+weighted avg       0.52      0.56      0.54       989
+
+=== Detailed Classification Report (H2) ===
+              precision    recall  f1-score   support
+
+        Bear       0.48      0.41      0.44       370
+     Neutral       0.04      0.02      0.03        92
+        Bull       0.58      0.69      0.63       527
+
+    accuracy                           0.52       989
+   macro avg       0.37      0.37      0.37       989
+weighted avg       0.49      0.52      0.50       989

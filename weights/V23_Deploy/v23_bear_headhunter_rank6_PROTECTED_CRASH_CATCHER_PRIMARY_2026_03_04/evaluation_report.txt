@@ -1,0 +1,45 @@
+==================================================
+EVALUATION REPORT: config.json
+==================================================
+Model ID: v23_bear_headhunter
+Test Samples: 989
+
+--- Horizon 1 (Short) Horizon ---
+[Classification] Accuracy: 0.3852376137512639
+[Classification] F1 (Macro): 0.3536
+[Classification] MCC: 0.0569
+[Regression]     MAE: 0.04038 | RMSE: 0.04927 | R2: -2.6581
+[Directional]    Reg Direction Acc: 53.69%
+[Trading Sim]    Total Return: 18.47% (Market: 57.77%)
+[Trading Sim]    Win Rate: 32.25% | Sharpe: 0.43
+
+--- Horizon 2 (Medium) Horizon ---
+[Classification] Accuracy: 0.4974721941354904
+[Classification] F1 (Macro): 0.3423
+[Classification] MCC: 0.0726
+[Regression]     MAE: 0.03984 | RMSE: 0.05390 | R2: -0.7301
+[Directional]    Reg Direction Acc: 65.22%
+[Trading Sim]    Total Return: 60.53% (Market: 57.77%)
+[Trading Sim]    Win Rate: 36.51% | Sharpe: 0.82
+
+=== Detailed Classification Report (H1) ===
+              precision    recall  f1-score   support
+
+        Bear       0.21      0.40      0.28       187
+     Neutral       0.64      0.39      0.49       607
+        Bull       0.26      0.35      0.30       195
+
+    accuracy                           0.39       989
+   macro avg       0.37      0.38      0.35       989
+weighted avg       0.48      0.39      0.41       989
+
+=== Detailed Classification Report (H2) ===
+              precision    recall  f1-score   support
+
+        Bear       0.41      0.46      0.43       370
+     Neutral       0.00      0.00      0.00        92
+        Bull       0.58      0.61      0.59       527
+
+    accuracy                           0.50       989
+   macro avg       0.33      0.36      0.34       989
+weighted avg       0.46      0.50      0.48       989
