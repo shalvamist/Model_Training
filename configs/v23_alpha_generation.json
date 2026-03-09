@@ -30,13 +30,9 @@
             0.005
         ],
         "batch_size": [
-            32,
-            64,
-            128
+            32
         ],
         "hidden_size": [
-            128,
-            256,
             512,
             1024
         ],
@@ -45,12 +41,16 @@
             0.4
         ],
         "lstm_layers": [
-            2,
-            6
+            4,
+            6,
+            8
         ],
         "trans_layers": [
-            1,
-            6
+            4,
+            5,
+            6,
+            7,
+            8
         ],
         "tail_penalty_factor": [
             2.0,
@@ -59,6 +59,12 @@
         "tail_threshold": [
             -0.05,
             -0.01
+        ],
+        "h1_weight": [
+            0.7
+        ],
+        "h2_weight": [
+            0.3
         ]
     },
     "feature_pipeline": [
@@ -185,5 +191,8 @@
     ],
     "input_dim": 21,
     "static_dim": 4,
-    "tail_threshold": -0.05
+    "tail_threshold": -0.05,
+    "h1_weight": 0.7,
+    "h2_weight": 0.3,
+    "trans_layers": 3
 }

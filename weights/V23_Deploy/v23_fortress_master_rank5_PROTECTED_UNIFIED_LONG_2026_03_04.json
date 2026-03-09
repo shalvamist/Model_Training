@@ -1,5 +1,5 @@
 {
-    "experiment_name": "v23_bear_headhunter",
+    "experiment_name": "v23_fortress_master",
     "processor": "v20",
     "model_type": "v23_multires",
     "use_revin": true,
@@ -7,21 +7,22 @@
     "train_years": 13,
     "val_years": 2,
     "test_years": 2,
-    "batch_size": 64,
+    "batch_size": 128,
     "epochs": 150,
     "early_stopping_patience": 20,
     "hidden_size": 1024,
-    "dropout": 0.3,
-    "lr": 0.0001,
+    "dropout": 0.2998330865225233,
+    "lr": 0.00017572271600431398,
     "lstm_layers": 2,
     "loss_type": "sharpe_aware",
-    "tail_penalty_factor": 5.0,
+    "tail_penalty_factor": 9.475365814680174,
+    "tail_threshold": -0.02236736129492906,
     "seq_length": 60,
     "extra_tickers": [
         "TLT",
         "SHY",
-        "SQQQ",
-        "VIX"
+        "XLE",
+        "XLF"
     ],
     "optuna": {
         "n_trials": 50,
@@ -129,23 +130,6 @@
             "rate_pct": true
         },
         {
-            "step": "log_return",
-            "input": "sqqq",
-            "output": "sqqq_ret"
-        },
-        {
-            "step": "log_return",
-            "input": "shy",
-            "output": "shy_ret"
-        },
-        {
-            "step": "rolling_correlation",
-            "input1": "log_ret",
-            "input2": "sqqq_ret",
-            "window": 20,
-            "output": "corr_qqq_sqqq_20"
-        },
-        {
             "step": "normalize",
             "columns": [
                 "us_treasury_10y",
@@ -157,10 +141,7 @@
                 "log_ret_w_5",
                 "log_ret_w_10",
                 "delta",
-                "gamma",
-                "sqqq_ret",
-                "shy_ret",
-                "corr_qqq_sqqq_20"
+                "gamma"
             ],
             "window": 60,
             "suffix": "_norm"
@@ -187,10 +168,7 @@
         "vix_slope_5",
         "vix_accel_5",
         "crash_delta",
-        "crash_gamma",
-        "sqqq_ret_norm",
-        "shy_ret_norm",
-        "corr_qqq_sqqq_20_norm"
+        "crash_gamma"
     ],
     "static_columns": [
         "strike_distance",
@@ -212,9 +190,8 @@
             "type": "log_future_return"
         }
     ],
-    "input_dim": 24,
+    "input_dim": 21,
     "static_dim": 4,
-    "tail_threshold": -0.05,
     "h1_weight": 0.7,
     "h2_weight": 0.3,
     "trans_layers": 2

@@ -1,5 +1,5 @@
 {
-    "experiment_name": "v23_bear_headhunter",
+    "experiment_name": "v23_alpha_generation",
     "processor": "v20",
     "model_type": "v23_multires",
     "use_revin": true,
@@ -7,21 +7,21 @@
     "train_years": 13,
     "val_years": 2,
     "test_years": 2,
-    "batch_size": 64,
+    "batch_size": 32,
     "epochs": 150,
     "early_stopping_patience": 20,
-    "hidden_size": 1024,
-    "dropout": 0.3,
-    "lr": 0.0001,
-    "lstm_layers": 2,
+    "hidden_size": 256,
+    "dropout": 0.3634158059475847,
+    "lr": 0.0008295870017632212,
+    "lstm_layers": 4,
     "loss_type": "sharpe_aware",
-    "tail_penalty_factor": 5.0,
+    "tail_penalty_factor": 2.269875163398882,
     "seq_length": 60,
     "extra_tickers": [
         "TLT",
         "SHY",
-        "SQQQ",
-        "VIX"
+        "XLE",
+        "XLF"
     ],
     "optuna": {
         "n_trials": 50,
@@ -29,28 +29,9 @@
             1e-05,
             0.005
         ],
-        "batch_size": [
-            32,
-            64,
-            128
-        ],
-        "hidden_size": [
-            128,
-            256,
-            512,
-            1024
-        ],
         "dropout": [
             0.1,
             0.4
-        ],
-        "lstm_layers": [
-            2,
-            6
-        ],
-        "trans_layers": [
-            1,
-            6
         ],
         "tail_penalty_factor": [
             2.0,
@@ -129,23 +110,6 @@
             "rate_pct": true
         },
         {
-            "step": "log_return",
-            "input": "sqqq",
-            "output": "sqqq_ret"
-        },
-        {
-            "step": "log_return",
-            "input": "shy",
-            "output": "shy_ret"
-        },
-        {
-            "step": "rolling_correlation",
-            "input1": "log_ret",
-            "input2": "sqqq_ret",
-            "window": 20,
-            "output": "corr_qqq_sqqq_20"
-        },
-        {
             "step": "normalize",
             "columns": [
                 "us_treasury_10y",
@@ -157,10 +121,7 @@
                 "log_ret_w_5",
                 "log_ret_w_10",
                 "delta",
-                "gamma",
-                "sqqq_ret",
-                "shy_ret",
-                "corr_qqq_sqqq_20"
+                "gamma"
             ],
             "window": 60,
             "suffix": "_norm"
@@ -187,10 +148,7 @@
         "vix_slope_5",
         "vix_accel_5",
         "crash_delta",
-        "crash_gamma",
-        "sqqq_ret_norm",
-        "shy_ret_norm",
-        "corr_qqq_sqqq_20_norm"
+        "crash_gamma"
     ],
     "static_columns": [
         "strike_distance",
@@ -212,10 +170,10 @@
             "type": "log_future_return"
         }
     ],
-    "input_dim": 24,
+    "input_dim": 21,
     "static_dim": 4,
-    "tail_threshold": -0.05,
+    "tail_threshold": -0.03958894348312183,
     "h1_weight": 0.7,
     "h2_weight": 0.3,
-    "trans_layers": 2
+    "trans_layers": 3
 }

@@ -7,15 +7,15 @@
     "train_years": 13,
     "val_years": 2,
     "test_years": 2,
-    "batch_size": 64,
+    "batch_size": 32,
     "epochs": 150,
     "early_stopping_patience": 20,
-    "hidden_size": 1024,
-    "dropout": 0.3,
-    "lr": 0.0001,
-    "lstm_layers": 2,
+    "hidden_size": 512,
+    "dropout": 0.2860828078930696,
+    "lr": 1.916768299141816e-05,
+    "lstm_layers": 5,
     "loss_type": "sharpe_aware",
-    "tail_penalty_factor": 5.0,
+    "tail_penalty_factor": 11.879681478855897,
     "seq_length": 60,
     "extra_tickers": [
         "TLT",
@@ -214,8 +214,8 @@
     ],
     "input_dim": 24,
     "static_dim": 4,
-    "tail_threshold": -0.05,
+    "tail_threshold": -0.044712505668592445,
     "h1_weight": 0.7,
     "h2_weight": 0.3,
-    "trans_layers": 2
+    "trans_layers": 4
 }

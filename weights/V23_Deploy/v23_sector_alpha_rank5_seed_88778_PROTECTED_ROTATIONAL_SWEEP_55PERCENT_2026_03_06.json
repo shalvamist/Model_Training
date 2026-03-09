@@ -1,5 +1,5 @@
 {
-    "experiment_name": "v23_bear_headhunter",
+    "experiment_name": "v23_sector_alpha",
     "processor": "v20",
     "model_type": "v23_multires",
     "use_revin": true,
@@ -7,21 +7,23 @@
     "train_years": 13,
     "val_years": 2,
     "test_years": 2,
-    "batch_size": 64,
+    "batch_size": 128,
     "epochs": 150,
     "early_stopping_patience": 20,
-    "hidden_size": 1024,
-    "dropout": 0.3,
-    "lr": 0.0001,
-    "lstm_layers": 2,
+    "hidden_size": 128,
+    "dropout": 0.10443159185758696,
+    "lr": 0.0007494729396815998,
+    "lstm_layers": 6,
     "loss_type": "sharpe_aware",
-    "tail_penalty_factor": 5.0,
+    "tail_penalty_factor": 3.7455961349611533,
     "seq_length": 60,
     "extra_tickers": [
-        "TLT",
-        "SHY",
-        "SQQQ",
-        "VIX"
+        "XLK",
+        "XLY",
+        "XLP",
+        "XLV",
+        "XLF",
+        "TLT"
     ],
     "optuna": {
         "n_trials": 50,
@@ -130,20 +132,42 @@
         },
         {
             "step": "log_return",
-            "input": "sqqq",
-            "output": "sqqq_ret"
+            "input": "xlk",
+            "output": "xlk_ret"
         },
         {
             "step": "log_return",
-            "input": "shy",
-            "output": "shy_ret"
+            "input": "xly",
+            "output": "xly_ret"
+        },
+        {
+            "step": "log_return",
+            "input": "xlp",
+            "output": "xlp_ret"
+        },
+        {
+            "step": "log_return",
+            "input": "xlv",
+            "output": "xlv_ret"
+        },
+        {
+            "step": "log_return",
+            "input": "xlf",
+            "output": "xlf_ret"
         },
         {
             "step": "rolling_correlation",
-            "input1": "log_ret",
-            "input2": "sqqq_ret",
+            "input1": "xly_ret",
+            "input2": "xlp_ret",
             "window": 20,
-            "output": "corr_qqq_sqqq_20"
+            "output": "corr_xly_xlp_20"
+        },
+        {
+            "step": "rolling_correlation",
+            "input1": "xlk_ret",
+            "input2": "xlv_ret",
+            "window": 20,
+            "output": "corr_xlk_xlv_20"
         },
         {
             "step": "normalize",
@@ -158,9 +182,13 @@
                 "log_ret_w_10",
                 "delta",
                 "gamma",
-                "sqqq_ret",
-                "shy_ret",
-                "corr_qqq_sqqq_20"
+                "xlk_ret",
+                "xly_ret",
+                "xlp_ret",
+                "xlv_ret",
+                "xlf_ret",
+                "corr_xly_xlp_20",
+                "corr_xlk_xlv_20"
             ],
             "window": 60,
             "suffix": "_norm"
@@ -188,9 +216,13 @@
         "vix_accel_5",
         "crash_delta",
         "crash_gamma",
-        "sqqq_ret_norm",
-        "shy_ret_norm",
-        "corr_qqq_sqqq_20_norm"
+        "xlk_ret_norm",
+        "xly_ret_norm",
+        "xlp_ret_norm",
+        "xlv_ret_norm",
+        "xlf_ret_norm",
+        "corr_xly_xlp_20_norm",
+        "corr_xlk_xlv_20_norm"
     ],
     "static_columns": [
         "strike_distance",
@@ -212,9 +244,9 @@
             "type": "log_future_return"
         }
     ],
-    "input_dim": 24,
+    "input_dim": 28,
     "static_dim": 4,
-    "tail_threshold": -0.05,
+    "tail_threshold": -0.04764617300656167,
     "h1_weight": 0.7,
     "h2_weight": 0.3,
     "trans_layers": 2

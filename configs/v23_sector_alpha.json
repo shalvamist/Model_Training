@@ -7,10 +7,10 @@
     "train_years": 13,
     "val_years": 2,
     "test_years": 2,
-    "batch_size": 64,
+    "batch_size": 32,
     "epochs": 150,
     "early_stopping_patience": 20,
-    "hidden_size": 1024,
+    "hidden_size": 128,
     "dropout": 0.3,
     "lr": 0.0001,
     "lstm_layers": 2,
@@ -31,28 +31,25 @@
             1e-05,
             0.005
         ],
-        "batch_size": [
-            32,
-            64,
-            128
-        ],
-        "hidden_size": [
-            128,
-            256,
-            512,
-            1024
-        ],
         "dropout": [
             0.1,
             0.4
         ],
+        "hidden_size": [
+            512,
+            1024,
+            2048
+        ],
         "lstm_layers": [
-            2,
-            6
+            6,
+            8,
+            10
         ],
         "trans_layers": [
-            1,
-            6
+            5,
+            6,
+            7,
+            8
         ],
         "tail_penalty_factor": [
             2.0,
@@ -61,6 +58,12 @@
         "tail_threshold": [
             -0.05,
             -0.01
+        ],
+        "h1_weight": [
+            0.7
+        ],
+        "h2_weight": [
+            0.3
         ]
     },
     "feature_pipeline": [
@@ -240,5 +243,8 @@
     ],
     "input_dim": 28,
     "static_dim": 4,
-    "tail_threshold": -0.05
+    "tail_threshold": -0.05,
+    "h1_weight": 0.7,
+    "h2_weight": 0.3,
+    "trans_layers": 4
 }

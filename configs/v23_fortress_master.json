@@ -60,6 +60,12 @@
         "tail_threshold": [
             -0.05,
             -0.01
+        ],
+        "h1_weight": [
+            0.7
+        ],
+        "h2_weight": [
+            0.3
         ]
     },
     "feature_pipeline": [
@@ -185,5 +191,8 @@
         }
     ],
     "input_dim": 21,
-    "static_dim": 4
+    "static_dim": 4,
+    "h1_weight": 0.7,
+    "h2_weight": 0.3,
+    "trans_layers": 3
 }
