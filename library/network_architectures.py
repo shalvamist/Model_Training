@@ -426,7 +426,23 @@ class PatchTST(nn.Module):
         # Simple heads
         self.head_1_reg = nn.Linear(self.hidden_size, 1)
         self.head_1_cls = nn.Linear(self.hidden_size, 3)
-        return self.head_1_reg(x), self.head_1_cls(x), self.head_2_reg(x), self.head_2_cls(x)
+        self.head_2_reg = nn.Linear(self.hidden_size, 1)
+        self.head_2_cls = nn.Linear(self.hidden_size, 3)
+
+    def forward(self, x_dyn, x_stat, x_time):
+        x = self.patch_embed(x_dyn)
+        x = self.pos_encoder(x)
+        x = self.transformer(x)
+        
+        x = x.permute(0, 2, 1)
+        x = self.pool(x).squeeze(-1)
+        
+        reg_1 = self.head_1_reg(x)
+        cls_1 = self.head_1_cls(x)
+        reg_2 = self.head_2_reg(x)
+        cls_2 = self.head_2_cls(x)
+        
+        return reg_1, cls_1, reg_2, cls_2
 
 class V23MultiResNetwork(nn.Module):
     """

@@ -240,7 +240,7 @@ class ModelTrainer:
             if score > best_score:
                 best_score = score
                 early_stop = 0
-                self.save_checkpoint(save_path, config=config, dyn_cols=dyn_cols, stat_cols=stat_cols)
+                self.save_checkpoint(save_path, config=config, dyn_cols=dyn_cols, stat_cols=stat_cols, score=score)
                 logger.info(f"  --> New Best! Saved to {save_path}")
             else:
                 early_stop += 1
@@ -251,14 +251,14 @@ class ModelTrainer:
                 
         return best_score
         
-    def save_checkpoint(self, path, config=None, dyn_cols=None, stat_cols=None):
+    def save_checkpoint(self, path, config=None, dyn_cols=None, stat_cols=None, score=None):
         """Save model checkpoint with metadata.
         
         Creates a dedicated folder structure:
         weights/model_name/
             ├── model.pth           (model weights)
             ├── config.json         (training config)
-            └── model_info.json     (architecture metadata)
+            └── metadata.json       (architecture metadata)
         """
         # Skip saving if path is devnull or None (used during Optuna trials)
         if path is None or path == os.devnull or 'nul' in str(path).lower():
@@ -317,13 +317,27 @@ class ModelTrainer:
             "training_info": {
                 "epochs": config.get('epochs', 'unknown') if config else 'unknown',
                 "loss_type": config.get('loss_type', 'mse') if config else 'mse',
-                "cls_weight": config.get('cls_weight', 0.5) if config else 0.5
-            }
+                "cls_weight": config.get('cls_weight', 0.5) if config else 0.5,
+                "dataset_split": {
+                    "train_years": config.get('train_years', 13) if config else 'unknown',
+                    "val_years": config.get('val_years', 2) if config else 'unknown',
+                    "test_years": config.get('test_years', 2) if config else 'unknown'
+                }
+            },
+            "performance": {
+                "final_validation_score": score if score is not None else "unknown"
+            },
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         }
         
-        metadata_path = os.path.join(model_dir, 'model_info.json')
+        metadata_path = os.path.join(model_dir, 'metadata.json')
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
         logger.info(f"Saved model metadata to {metadata_path}")
+        
+        # Also remove outdated model_info.json if it exists
+        old_info = os.path.join(model_dir, 'model_info.json')
+        if os.path.exists(old_info):
+            os.remove(old_info)
         
         return model_dir

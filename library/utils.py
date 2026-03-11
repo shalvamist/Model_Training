@@ -117,3 +117,36 @@ def load_scalers(path_prefix):
     s1 = joblib.load(f"{path_prefix}_scaler_1.pkl")
     s2 = joblib.load(f"{path_prefix}_scaler_2.pkl")
     return s1, s2
+
+def find_config_for_model(model_name, model_dir, configs_dir):
+    """
+    Heuristic to find the correct config file for a model.
+    """
+    import os
+    
+    # Handle rank_candidate prefix
+    if model_name.startswith("rank_candidate_"):
+        real_name = model_name.replace("rank_candidate_", "")
+        rank_dir = os.path.join(os.path.dirname(os.path.dirname(model_dir)), "rank_candidates")
+        for root, dirs, files in os.walk(rank_dir):
+            if os.path.basename(root) == real_name:
+                local_config = os.path.join(root, "config.json")
+                if os.path.exists(local_config):
+                    return local_config
+    
+    # 1. Config in model dir
+    local_config = os.path.join(model_dir, "config.json")
+    if os.path.exists(local_config):
+        return local_config
+    
+    # 2. Config in zoo
+    zoo_config = os.path.join(configs_dir, "zoo", f"{model_name}.json")
+    if os.path.exists(zoo_config):
+        return zoo_config
+
+    # 3. Recursive search in configs dir
+    for root, dirs, files in os.walk(configs_dir):
+        if f"{model_name}.json" in files:
+            return os.path.join(root, f"{model_name}.json")
+            
+    return None

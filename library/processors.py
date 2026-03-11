@@ -557,3 +557,91 @@ class ProcessorV20(GenericProcessor):
             
         # Return 8-tuple
         return (*base_seqs, y1_cls, y2_cls)
+
+
+def prepare_training_data(processor, config, df=None, batch_size_override=None, return_raw=False):
+    """
+    Abstracts data fetching (or uses provided df), sequence generation, target classification, 
+    chronological splitting, and DataLoader creation.
+    """
+    import torch
+    from torch.utils.data import DataLoader, TensorDataset
+    
+    if df is None:
+        df = processor.fetch_data()
+        if df is None or df.empty:
+            logger.error("No data fetched. Exiting.")
+            return None
+        
+    df_proc, dyn_cols, stat_cols = processor.process(df)
+    sequences = processor.create_sequences(df_proc, dyn_cols, stat_cols)
+    
+    if len(sequences) == 8:
+        X_dyn, X_stat, X_time, Y_1, Y_2, dates, Y_1_cls, Y_2_cls = sequences
+    else:
+        X_dyn, X_stat, X_time, Y_1, Y_2, dates = sequences
+        cls_threshold = config.get('cls_threshold', 0.02)
+        
+        def classify_return(returns, thresh):
+            labels = np.zeros(len(returns), dtype=np.int64)
+            labels[returns > thresh] = 2
+            labels[returns < -thresh] = 0
+            labels[(returns >= -thresh) & (returns <= thresh)] = 1
+            return labels
+            
+        Y_1_cls = classify_return(Y_1, cls_threshold)
+        Y_2_cls = classify_return(Y_2, cls_threshold)
+        
+    if len(X_dyn) == 0:
+        logger.error("No sequences created. Check data length vs seq_length.")
+        return None
+        
+    # 3-Way Chronological Split
+    train_years = config.get('train_years', 13)
+    val_years = config.get('val_years', 2)
+    test_years = config.get('test_years', 2)
+    total_years = train_years + val_years + test_years
+    
+    n_samples = len(X_dyn)
+    train_frac = train_years / total_years
+    val_frac = val_years / total_years
+    
+    train_end = int(n_samples * train_frac)
+    val_end = int(n_samples * (train_frac + val_frac))
+    
+    logger.info(f"Data Split: Train={train_years}y ({train_end} samples), Val={val_years}y ({val_end-train_end} samples), Test={test_years}y ({n_samples-val_end} samples)")
+    
+    train_data = TensorDataset(
+        torch.tensor(X_dyn[:train_end], dtype=torch.float32),
+        torch.tensor(X_stat[:train_end], dtype=torch.float32),
+        torch.tensor(X_time[:train_end], dtype=torch.long),
+        torch.tensor(Y_1[:train_end], dtype=torch.float32),
+        torch.tensor(Y_1_cls[:train_end], dtype=torch.long),
+        torch.tensor(Y_2[:train_end], dtype=torch.float32),
+        torch.tensor(Y_2_cls[:train_end], dtype=torch.long)
+    )
+    
+    val_data = TensorDataset(
+        torch.tensor(X_dyn[train_end:val_end], dtype=torch.float32),
+        torch.tensor(X_stat[train_end:val_end], dtype=torch.float32),
+        torch.tensor(X_time[train_end:val_end], dtype=torch.long),
+        torch.tensor(Y_1[train_end:val_end], dtype=torch.float32),
+        torch.tensor(Y_1_cls[train_end:val_end], dtype=torch.long),
+        torch.tensor(Y_2[train_end:val_end], dtype=torch.float32),
+        torch.tensor(Y_2_cls[train_end:val_end], dtype=torch.long)
+    )
+    
+    batch_size = batch_size_override if batch_size_override else config.get("batch_size", 32)
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=batch_size)
+    
+    if return_raw:
+        return {
+            'train_loader': train_loader, 'val_loader': val_loader,
+            'dyn_cols': dyn_cols, 'stat_cols': stat_cols,
+            'X_dyn': X_dyn, 'X_stat': X_stat, 'X_time': X_time,
+            'Y_1': Y_1, 'Y_2': Y_2, 'dates': dates,
+            'Y_1_cls': Y_1_cls, 'Y_2_cls': Y_2_cls,
+            'train_end': train_end, 'val_end': val_end
+        }
+    return train_loader, val_loader, dyn_cols, stat_cols
