@@ -95,7 +95,10 @@ class ModelTrainer:
                 # V19: Use single composite loss per horizon
                 loss_h1 = self.composite_loss_fn(r1, c1, d1, target_1, b[4])
                 loss_h2 = self.composite_loss_fn(r2, c2, d2, target_2, b[6])
-                loss = 0.7 * loss_h1 + 0.3 * loss_h2  # H1-weighted since we target 7-day DirAcc
+                
+                w1 = self.config.get('h1_weight', 0.5)
+                w2 = self.config.get('h2_weight', 0.5)
+                loss = w1 * loss_h1 + w2 * loss_h2
             else:
                 # Legacy: separate cls + reg losses
                 loss_c_1 = self.cls_loss_fn(c1, b[4])
@@ -150,7 +153,10 @@ class ModelTrainer:
                 if self.use_composite_loss and d1 is not None:
                     loss_h1 = self.composite_loss_fn(r1, c1, d1, target_1, b[4])
                     loss_h2 = self.composite_loss_fn(r2, c2, d2, target_2, b[6])
-                    loss = 0.7 * loss_h1 + 0.3 * loss_h2
+                    
+                    w1 = self.config.get('h1_weight', 0.5)
+                    w2 = self.config.get('h2_weight', 0.5)
+                    loss = w1 * loss_h1 + w2 * loss_h2
                 else:
                     if not self.use_composite_loss and not isinstance(self.reg_loss_fn, QuantileLoss):
                          if target_1.dim() == 1: target_1 = target_1.view(-1, 1)
@@ -218,10 +224,13 @@ class ModelTrainer:
             val_loss, val_f1_1, val_f1_2, val_dir_acc = self.validate(val_loader)
             
             # V19: Score based on mode
+            w1 = self.config.get('h1_weight', 0.5)
+            w2 = self.config.get('h2_weight', 0.5)
+            
             if score_mode == 'directional':
-                score = (0.5 * val_dir_acc) + (0.3 * val_f1_1) + (0.2 * val_f1_2)
+                score = (0.5 * val_dir_acc) + (0.5 * ((w1 * val_f1_1) + (w2 * val_f1_2)))
             else:
-                score = (0.7 * val_f1_1) + (0.3 * val_f1_2)
+                score = (w1 * val_f1_1) + (w2 * val_f1_2)
             
             self.scheduler.step(score)
             

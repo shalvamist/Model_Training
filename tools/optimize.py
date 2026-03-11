@@ -247,6 +247,7 @@ def main():
     parser.add_argument("--top_k", type=int, default=3, help="Save top K best configurations")
     parser.add_argument("--study_name", type=str, default=None, help="Optuna study name")
     parser.add_argument("--force_cpu", action="store_true", help="Force CPU usage")
+    parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs for Optuna")
     args = parser.parse_args()
     
     config_path = args.config
@@ -308,14 +309,15 @@ def main():
     study_name = args.study_name or config.get("experiment_name", "optimization")
     study = optuna.create_study(direction="maximize", study_name=study_name)
     
-    logger.info(f"Starting Optuna Optimization ({n_trials} trials, {args.epochs} epochs per trial)...")
+    logger.info(f"Starting Optuna Optimization ({n_trials} trials, {args.epochs} epochs per trial, {args.n_jobs} parallel jobs)...")
     
     study.optimize(
         lambda trial: objective(
             trial, config, device, X_dyn, X_stat, X_time, Y_1, Y_2, 
             train_end, val_end, Y_1_cls_pre, Y_2_cls_pre, epochs=args.epochs or config.get("epochs", 10)
         ), 
-        n_trials=n_trials
+        n_trials=n_trials,
+        n_jobs=args.n_jobs
     )
     
     logger.info("Optimization Complete.")

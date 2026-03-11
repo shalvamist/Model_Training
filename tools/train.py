@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--batch_size", type=int, help="Override batch_size from config")
     parser.add_argument("--lr", type=float, help="Override learning rate from config")
     parser.add_argument("--force_cpu", action="store_true", help="Force CPU usage")
+    parser.add_argument("--seed", type=int, help="Deterministic seed for PyTorch and Numpy")
     args = parser.parse_args()
     
     config_path = args.config
@@ -54,6 +55,13 @@ def main():
     # Set Device
     device = "cuda" if torch.cuda.is_available() and config.get("use_gpu", False) else "cpu"
     logger.info(f"Using device: {device}")
+    
+    if args.seed is not None:
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(args.seed)
+        logger.info(f"Set deterministic seed to: {args.seed}")
     
     # 1. Data Processing
     logger.info("Initializing Processor...")
@@ -154,6 +162,9 @@ def main():
         experiment_name = config_name
     else:
         experiment_name = config.get('experiment_name', 'model')
+        
+    if args.seed is not None:
+        experiment_name = f"{experiment_name}_seed_{args.seed}"
         
     save_path = os.path.join("weights", f"{experiment_name}.pth")
     

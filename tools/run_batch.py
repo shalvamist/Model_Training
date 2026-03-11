@@ -17,6 +17,7 @@ def main():
     parser.add_argument("--trials", type=int, default=20, help="Number of trials for optimization")
     parser.add_argument("--top_k", type=int, default=3, help="Save and train top K best models after optimization")
     parser.add_argument("--final_epochs", type=int, help="Epochs for final training of top K models (if --optimize is set)")
+    parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs for Optuna optimization")
     args = parser.parse_args()
     
     config_dir = args.config_dir
@@ -63,8 +64,8 @@ def main():
         start_time = time.time()
         
         if args.optimize:
-            print(f"   -> Mode: OPTIMIZE (Trials: {args.trials}, Top K: {args.top_k})")
-            cmd = [sys.executable, optimize_script, "--config", config_file, "--trials", str(args.trials), "--top_k", str(args.top_k)]
+            print(f"   -> Mode: OPTIMIZE (Trials: {args.trials}, Top K: {args.top_k}, Jobs: {args.n_jobs})")
+            cmd = [sys.executable, optimize_script, "--config", config_file, "--trials", str(args.trials), "--top_k", str(args.top_k), "--n_jobs", str(args.n_jobs)]
             if args.epochs: cmd.extend(["--epochs", str(args.epochs)])
             if args.force_cpu: cmd.append("--force_cpu")
         else:
