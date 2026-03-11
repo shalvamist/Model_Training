@@ -2,7 +2,7 @@ import logging
 import json
 import os
 import torch
-from .processors import ProcessorV11, ProcessorV13, ProcessorV15, ProcessorV20, GenericProcessor
+from .processors import ProcessorV11, ProcessorV13, ProcessorV15, ProcessorV20, GenericProcessor, GldProcessor
 from .network_architectures import HybridJointNetwork, ExperimentalNetwork, PatchTST, V23MultiResNetwork
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ class ModelFactory:
         if version == 'v15': return ProcessorV15(config)
         if version == 'v20': return ProcessorV20(config)
         if version == 'generic': return GenericProcessor(config)
+        if version == 'gld_v1': return GldProcessor(config)
         if version == 'universal':
             # Dynamic import to support models_evo extension
             from models_evo.processors import UniversalProcessor

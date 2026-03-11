@@ -559,6 +559,105 @@ class ProcessorV20(GenericProcessor):
         return (*base_seqs, y1_cls, y2_cls)
 
 
+class GldProcessor(ProcessorV20):
+    """
+    GLD V1 Processor.
+    
+    Target: GLD (SPDR Gold Trust ETF)
+    
+    Key differences vs QQQ:
+    - Target ticker is GLD, not QQQ
+    - Feature set centers on macro drivers: real yields, DXY, silver ratio
+    - Longer sequence window (90 days) to capture slow macro cycles
+    - Lower cls_threshold (1.5%) since gold moves less dramatically than tech
+    - Extra tickers: SLV (silver), TLT (bonds correlation)
+    """
+    def __init__(self, config):
+        super().__init__(config)
+        # Additional tickers for gold-specific signals
+        self.additional_tickers = config.get('extra_tickers', ['SLV', 'TLT'])
+
+    def fetch_data(self):
+        # Override to use GLD as the underlying
+        return super().fetch_data(ticker='GLD')
+
+    def _fetch_extras(self, df, get_col_func):
+        # Silver (for gold/silver ratio)
+        df['slv'] = get_col_func('SLV', 'Close').ffill()
+        # TLT bonds (duration exposure, negative real yield indicator)
+        df['tlt'] = get_col_func('TLT', 'Close').ffill()
+
+    def process(self, df):
+        # 1. Run the V20 pipeline (generic feature pipeline + triple barrier targets)
+        #    This automatically handles the feature_pipeline from config,
+        #    RSI, VIX dynamics, and crash greeks.
+        df_proc, dyn_cols, stat_cols = super().process(df)
+        if df_proc is None:
+            return None, [], []
+
+        p = self.params
+
+        # 2. Gold-Specific Derived Features
+        # ----------------------------------
+
+        # Real Yield Proxy: 10Y nominal yield minus TIP momentum
+        # When real yields rise, gold falls. When real yields fall, gold rises.
+        if 'us_treasury_10y' in df_proc.columns and 'tip' in df_proc.columns:
+            tip_ret = np.log(df_proc['tip'] / df_proc['tip'].shift(20)).fillna(0)
+            # Positive tip_ret = inflation breakeven rising = real yield compressing = GLD positive
+            df_proc['real_yield_proxy'] = robust_normalize(df_proc['us_treasury_10y'], p['robust_window']) - tip_ret
+            df_proc['real_yield_proxy'] = df_proc['real_yield_proxy'].fillna(0)
+        else:
+            df_proc['real_yield_proxy'] = 0.0
+
+        # DXY Momentum (most important gold predictor after real yields)
+        if 'dxy' in df_proc.columns:
+            df_proc['dxy_ret_5'] = np.log(df_proc['dxy'] / df_proc['dxy'].shift(5)).fillna(0)
+            df_proc['dxy_ret_20'] = np.log(df_proc['dxy'] / df_proc['dxy'].shift(20)).fillna(0)
+            df_proc['dxy_norm'] = robust_normalize(df_proc['dxy'], p['robust_window'])
+        else:
+            df_proc['dxy_ret_5'] = 0.0
+            df_proc['dxy_ret_20'] = 0.0
+            df_proc['dxy_norm'] = 0.0
+
+        # Gold/Silver Ratio (divergence = regime shift signal)
+        if 'slv' in df_proc.columns:
+            df_proc['gold_silver_ratio'] = df_proc['underlying_close'] / (df_proc['slv'] + 1e-6)
+            df_proc['gold_silver_ratio_norm'] = robust_normalize(df_proc['gold_silver_ratio'], p['robust_window'])
+        else:
+            df_proc['gold_silver_ratio_norm'] = 0.0
+
+        # Gold/Oil Ratio (commodity complex signal)
+        if 'oil' in df_proc.columns:
+            df_proc['gold_oil_ratio'] = df_proc['underlying_close'] / (df_proc['oil'] + 1e-6)
+            df_proc['gold_oil_ratio_norm'] = robust_normalize(df_proc['gold_oil_ratio'], p['robust_window'])
+        else:
+            df_proc['gold_oil_ratio_norm'] = 0.0
+
+        # TLT Momentum (bond rally = gold rally proxy)
+        if 'tlt' in df_proc.columns:
+            df_proc['tlt_ret_10'] = np.log(df_proc['tlt'] / df_proc['tlt'].shift(10)).fillna(0)
+            df_proc['tlt_corr_20'] = df_proc['log_ret'].rolling(20).corr(df_proc['tlt_ret_10']).fillna(0)
+        else:
+            df_proc['tlt_ret_10'] = 0.0
+            df_proc['tlt_corr_20'] = 0.0
+
+        # 3. Add new gold features to dynamic columns
+        gld_features = [
+            'real_yield_proxy', 'dxy_ret_5', 'dxy_ret_20', 'dxy_norm',
+            'gold_silver_ratio_norm', 'gold_oil_ratio_norm',
+            'tlt_ret_10', 'tlt_corr_20'
+        ]
+        for col in gld_features:
+            if col not in dyn_cols and col in df_proc.columns:
+                dyn_cols.append(col)
+
+        # Fill any NaN introduced by the new features
+        df_proc[gld_features] = df_proc[gld_features].fillna(0)
+
+        return self._verify_data(df_proc), dyn_cols, stat_cols
+
+
 def prepare_training_data(processor, config, df=None, batch_size_override=None, return_raw=False):
     """
     Abstracts data fetching (or uses provided df), sequence generation, target classification, 

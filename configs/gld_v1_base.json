@@ -1,0 +1,159 @@
+{
+    "experiment_name": "gld_v1_base",
+    "processor": "gld_v1",
+    "model_type": "v23_multires",
+    "use_revin": true,
+    "use_gpu": true,
+
+    "train_years": 15,
+    "val_years": 2,
+    "test_years": 2,
+
+    "batch_size": 32,
+    "epochs": 150,
+    "early_stopping_patience": 20,
+
+    "hidden_size": 512,
+    "dropout": 0.2,
+    "lr": 0.0001,
+    "lstm_layers": 2,
+    "trans_layers": 2,
+
+    "loss_type": "sharpe_aware",
+    "tail_penalty_factor": 3.0,
+    "tail_threshold": -0.03,
+
+    "seq_length": 90,
+    "cls_threshold": 0.015,
+
+    "extra_tickers": ["SLV", "TLT"],
+
+    "h1_weight": 0.6,
+    "h2_weight": 0.4,
+
+    "optuna": {
+        "n_trials": 40,
+        "lr": [1e-5, 0.001],
+        "batch_size": [16, 32, 64],
+        "hidden_size": [256, 512, 1024],
+        "dropout": [0.1, 0.4],
+        "lstm_layers": [2, 5],
+        "trans_layers": [1, 4],
+        "tail_penalty_factor": [1.5, 8.0],
+        "tail_threshold": [-0.04, -0.01]
+    },
+
+    "feature_pipeline": [
+        {
+            "step": "log_return",
+            "input": "underlying_close",
+            "output": "log_ret",
+            "lags": [3, 5, 10, 20, 60]
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "atr",
+            "period": 5,
+            "output": "atr_5"
+        },
+        {
+            "step": "technical_indicator",
+            "indicator": "atr",
+            "period": 20,
+            "output": "atr_20"
+        },
+        {
+            "step": "arithmetic",
+            "formula": "atr_5 / (atr_20 + 1e-6)",
+            "output": "atr_ratio"
+        },
+        {
+            "step": "rolling_correlation",
+            "input1": "log_ret",
+            "input2": "tlt",
+            "window": 20,
+            "output": "corr_gld_tlt_20"
+        },
+        {
+            "step": "fourier",
+            "input": "log_ret",
+            "window": 90,
+            "output": "log_ret_entropy_90"
+        },
+        {
+            "step": "wavelet",
+            "input": "log_ret",
+            "widths": [5, 10, 20],
+            "prefix": "log_ret_w"
+        },
+        {
+            "step": "normalize",
+            "columns": [
+                "us_treasury_10y",
+                "vix",
+                "atr_ratio",
+                "corr_gld_tlt_20",
+                "log_ret_entropy_90",
+                "log_ret_w_5",
+                "log_ret_w_10",
+                "log_ret_w_20"
+            ],
+            "window": 60,
+            "suffix": "_norm"
+        }
+    ],
+
+    "dynamic_columns": [
+        "log_ret",
+        "log_ret_3",
+        "log_ret_5",
+        "log_ret_10",
+        "log_ret_20",
+        "log_ret_60",
+        "atr_ratio_norm",
+        "corr_gld_tlt_20_norm",
+        "log_ret_entropy_90_norm",
+        "log_ret_w_5_norm",
+        "log_ret_w_10_norm",
+        "log_ret_w_20_norm",
+        "us_treasury_10y_norm",
+        "vix_norm",
+        "rsi_abs",
+        "vix_abs",
+        "vix_slope_5",
+        "vix_accel_5",
+        "real_yield_proxy",
+        "dxy_ret_5",
+        "dxy_ret_20",
+        "dxy_norm",
+        "gold_silver_ratio_norm",
+        "gold_oil_ratio_norm",
+        "tlt_ret_10",
+        "tlt_corr_20"
+    ],
+
+    "static_columns": [
+        "strike_distance",
+        "dte_normalized",
+        "is_call",
+        "moneyness"
+    ],
+
+    "targets": [
+        {
+            "name": "target_1",
+            "input": "underlying_close",
+            "horizon": 7,
+            "type": "log_future_return"
+        },
+        {
+            "name": "target_2",
+            "input": "underlying_close",
+            "horizon": 21,
+            "type": "log_future_return"
+        }
+    ],
+
+    "input_dim": 26,
+    "static_dim": 4
+}
